@@ -1,0 +1,177 @@
+<th:block xmlns:th="https://www.thymeleaf.org" th:fragment="theme">
+  <meta name="color-scheme" content="light dark">
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var observedAttributes = ['class', 'data-color-scheme', 'data-theme', 'data-mode'];
+
+      function normalizeScheme(value) {
+        if (!value) {
+          return null;
+        }
+        var normalized = String(value).trim().toLowerCase();
+        if (normalized === 'dark' || normalized === 'night') {
+          return 'dark';
+        }
+        if (normalized === 'light' || normalized === 'day') {
+          return 'light';
+        }
+        if (normalized === 'auto' || normalized === 'system') {
+          return 'auto';
+        }
+        return null;
+      }
+
+      function detectFromElement(element) {
+        if (!element) {
+          return null;
+        }
+
+        var direct = normalizeScheme(element.getAttribute('data-color-scheme'))
+          || normalizeScheme(element.getAttribute('data-theme'))
+          || normalizeScheme(element.getAttribute('data-mode'));
+        if (direct) {
+          return direct;
+        }
+
+        var classes = element.classList;
+        if (!classes) {
+          return null;
+        }
+        if (
+          classes.contains('dark')
+          || classes.contains('color-scheme-dark')
+          || classes.contains('theme-dark')
+          || classes.contains('dark-mode')
+        ) {
+          return 'dark';
+        }
+        if (
+          classes.contains('light')
+          || classes.contains('color-scheme-light')
+          || classes.contains('theme-light')
+          || classes.contains('light-mode')
+        ) {
+          return 'light';
+        }
+        if (classes.contains('color-scheme-auto') || classes.contains('theme-auto')) {
+          return 'auto';
+        }
+        return null;
+      }
+
+      function detectScheme() {
+        return detectFromElement(root) || detectFromElement(document.body) || 'auto';
+      }
+
+      function applyScheme(nextScheme) {
+        if (root.getAttribute('data-color-scheme') !== nextScheme) {
+          root.setAttribute('data-color-scheme', nextScheme);
+        }
+      }
+
+      function syncScheme() {
+        applyScheme(detectScheme());
+      }
+
+      syncScheme();
+
+      var startObserver = function () {
+        syncScheme();
+        var observer = new MutationObserver(syncScheme);
+        observer.observe(root, {
+          attributes: true,
+          attributeFilter: observedAttributes,
+        });
+        if (document.body) {
+          observer.observe(document.body, {
+            attributes: true,
+            attributeFilter: observedAttributes,
+          });
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+      } else {
+        startObserver();
+      }
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --mdocs-bg: #f8fafc;
+      --mdocs-surface: #ffffff;
+      --mdocs-surface-soft: #f1f5f9;
+      --mdocs-hero-bg: linear-gradient(135deg, #f8fafc, #ecfeff);
+      --mdocs-text: #1f2937;
+      --mdocs-text-strong: #0f172a;
+      --mdocs-muted: #64748b;
+      --mdocs-border: #e2e8f0;
+      --mdocs-accent: #0f766e;
+      --mdocs-accent-soft: #ecfdf5;
+      --mdocs-code-bg: #0f172a;
+      --mdocs-code-text: #e2e8f0;
+      --mdocs-inline-code-bg: #f1f5f9;
+      --mdocs-shadow: 0 12px 30px rgba(15, 118, 110, 0.08);
+    }
+
+    html[data-color-scheme="light"],
+    html.light,
+    html.color-scheme-light,
+    html.theme-light,
+    html.light-mode {
+      color-scheme: light;
+    }
+
+    html[data-color-scheme="dark"],
+    html.dark,
+    html.color-scheme-dark,
+    html.theme-dark,
+    html.dark-mode {
+      color-scheme: dark;
+      --mdocs-bg: #020617;
+      --mdocs-surface: #0f172a;
+      --mdocs-surface-soft: #111827;
+      --mdocs-hero-bg: linear-gradient(135deg, #0f172a, #082f49);
+      --mdocs-text: #e5edf7;
+      --mdocs-text-strong: #f8fafc;
+      --mdocs-muted: #94a3b8;
+      --mdocs-border: #1e293b;
+      --mdocs-accent: #5eead4;
+      --mdocs-accent-soft: rgba(45, 212, 191, 0.14);
+      --mdocs-code-bg: #020617;
+      --mdocs-code-text: #dbeafe;
+      --mdocs-inline-code-bg: #172036;
+      --mdocs-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+    }
+
+    html[data-color-scheme="auto"],
+    html.color-scheme-auto,
+    html.theme-auto {
+      color-scheme: light dark;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      html[data-color-scheme="auto"],
+      html.color-scheme-auto,
+      html.theme-auto {
+        --mdocs-bg: #020617;
+        --mdocs-surface: #0f172a;
+        --mdocs-surface-soft: #111827;
+        --mdocs-hero-bg: linear-gradient(135deg, #0f172a, #082f49);
+        --mdocs-text: #e5edf7;
+        --mdocs-text-strong: #f8fafc;
+        --mdocs-muted: #94a3b8;
+        --mdocs-border: #1e293b;
+        --mdocs-accent: #5eead4;
+        --mdocs-accent-soft: rgba(45, 212, 191, 0.14);
+        --mdocs-code-bg: #020617;
+        --mdocs-code-text: #dbeafe;
+        --mdocs-inline-code-bg: #172036;
+        --mdocs-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
+      }
+    }
+  </style>
+</th:block>

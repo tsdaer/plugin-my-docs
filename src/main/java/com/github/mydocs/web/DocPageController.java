@@ -16,10 +16,13 @@ public class DocPageController {
 
     private final DocFinder docFinder;
     private final TemplateNameResolver templateNameResolver;
+    private final DocPageSeoMetadataFactory seoMetadataFactory;
 
-    public DocPageController(DocFinder docFinder, TemplateNameResolver templateNameResolver) {
+    public DocPageController(DocFinder docFinder, TemplateNameResolver templateNameResolver,
+        DocPageSeoMetadataFactory seoMetadataFactory) {
         this.docFinder = docFinder;
         this.templateNameResolver = templateNameResolver;
+        this.seoMetadataFactory = seoMetadataFactory;
     }
 
     @GetMapping("/docs")
@@ -28,6 +31,7 @@ public class DocPageController {
             .zipWith(templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/index"))
             .map(tuple -> {
                 model.addAttribute("libraries", tuple.getT1());
+                model.addAttribute("seo", seoMetadataFactory.forIndex());
                 return tuple.getT2();
             });
     }
@@ -46,6 +50,7 @@ public class DocPageController {
                 model.addAttribute("library", library);
                 model.addAttribute("tree", tuple.getT1());
                 model.addAttribute("docs", tuple.getT2());
+                model.addAttribute("seo", seoMetadataFactory.forLibrary(library));
                 return tuple.getT3();
             }));
     }
@@ -65,6 +70,7 @@ public class DocPageController {
                     model.addAttribute("library", library);
                     model.addAttribute("doc", doc);
                     model.addAttribute("tree", tuple.getT1());
+                    model.addAttribute("seo", seoMetadataFactory.forDetail(library, doc));
                     return tuple.getT2();
                 })));
     }

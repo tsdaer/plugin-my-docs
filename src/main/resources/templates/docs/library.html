@@ -1,20 +1,29 @@
 <!doctype html>
-<html lang="zh" xmlns:th="https://www.thymeleaf.org">
+<html lang="zh" data-color-scheme="auto" xmlns:th="https://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title th:text="${library.spec.title}">文档库</title>
+  <title th:text="${seo.title}">文档库</title>
+  <meta name="description" th:content="${seo.description}">
+  <meta property="og:title" th:content="${seo.title}">
+  <meta property="og:description" th:content="${seo.description}">
+  <meta property="og:type" th:content="${seo.ogType}">
+  <meta property="og:image" th:if="${!#strings.isEmpty(seo.image)}" th:content="${seo.image}">
+  <th:block th:replace="~{plugin:my-docs:docs/modules/theme :: theme}"></th:block>
   <style>
-    body { margin: 0; color: #1f2937; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; }
+    body { margin: 0; color: var(--mdocs-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--mdocs-bg); transition: background-color .2s ease, color .2s ease; }
     .mdocs-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; padding: 36px 20px 72px; }
-    .mdocs-sidebar { border-right: 1px solid #e2e8f0; padding-right: 20px; }
-    .mdocs-back { color: #0f766e; text-decoration: none; font-size: 14px; }
-    .mdocs-title { margin: 16px 0 8px; font-size: 32px; line-height: 1.2; }
-    .mdocs-muted { color: #64748b; line-height: 1.7; }
+    .mdocs-sidebar { border-right: 1px solid var(--mdocs-border); padding-right: 20px; }
+    .mdocs-back { color: var(--mdocs-accent); text-decoration: none; font-size: 14px; }
+    .mdocs-title { margin: 16px 0 8px; font-size: 32px; line-height: 1.2; color: var(--mdocs-text-strong); }
+    .mdocs-muted { color: var(--mdocs-muted); line-height: 1.7; }
+    .mdocs-hero { overflow: hidden; border: 1px solid var(--mdocs-border); border-radius: 16px; background: var(--mdocs-hero-bg); box-shadow: var(--mdocs-shadow); }
+    .mdocs-hero-cover { display: block; width: 100%; max-height: 280px; object-fit: cover; background: var(--mdocs-surface-soft); }
+    .mdocs-hero-body { padding: 24px; }
     .mdocs-list { display: grid; gap: 10px; margin-top: 28px; }
-    .mdocs-doc-link { display: block; padding: 14px 16px; color: inherit; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 8px; }
-    .mdocs-doc-link:hover { border-color: #0f766e; color: #0f766e; }
-    @media (max-width: 760px) { .mdocs-layout { display: block; } .mdocs-sidebar { border-right: 0; border-bottom: 1px solid #e2e8f0; padding: 0 0 20px; margin-bottom: 24px; } }
+    .mdocs-doc-link { display: block; padding: 14px 16px; color: inherit; text-decoration: none; border: 1px solid var(--mdocs-border); border-radius: 8px; background: var(--mdocs-surface); transition: border-color .2s ease, color .2s ease, background-color .2s ease, transform .2s ease; }
+    .mdocs-doc-link:hover { border-color: var(--mdocs-accent); color: var(--mdocs-accent); transform: translateX(2px); }
+    @media (max-width: 760px) { .mdocs-layout { display: block; } .mdocs-sidebar { border-right: 0; border-bottom: 1px solid var(--mdocs-border); padding: 0 0 20px; margin-bottom: 24px; } }
   </style>
 </head>
 <body>
@@ -24,8 +33,14 @@
       <div th:replace="~{plugin:my-docs:docs/modules/tree :: tree(nodes=${tree}, library=${library}, currentDoc=${null})}"></div>
     </aside>
     <section>
-      <h1 class="mdocs-title" th:text="${library.spec.title}">文档库</h1>
-      <p class="mdocs-muted" th:text="${library.spec.description}">Description</p>
+      <header class="mdocs-hero">
+        <img class="mdocs-hero-cover" th:if="${!#strings.isEmpty(library.spec.cover)}"
+             th:src="${library.spec.cover}" th:alt="${library.spec.title}">
+        <div class="mdocs-hero-body">
+          <h1 class="mdocs-title" th:text="${library.spec.title}">文档库</h1>
+          <p class="mdocs-muted" th:text="${library.spec.description}">Description</p>
+        </div>
+      </header>
       <p class="mdocs-muted" th:if="${#lists.isEmpty(docs)}">暂无已发布文档。</p>
       <div class="mdocs-list" th:if="${!#lists.isEmpty(docs)}">
         <a class="mdocs-doc-link" th:each="doc : ${docs}"

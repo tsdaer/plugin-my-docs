@@ -31,6 +31,7 @@ interface FormState {
   title: string
   slug: string
   description: string
+  cover: string
   priority: number
 }
 
@@ -38,6 +39,7 @@ const formState = ref<FormState>({
   title: '',
   slug: '',
   description: '',
+  cover: '',
   priority: 0,
 })
 
@@ -49,6 +51,7 @@ watch(
         title: value.spec.title,
         slug: value.spec.slug,
         description: value.spec.description ?? '',
+        cover: value.spec.cover ?? '',
         priority: value.spec.priority ?? 0,
       }
     }
@@ -67,6 +70,7 @@ async function handleSubmit(values: FormState) {
           title: values.title,
           slug: values.slug,
           description: values.description,
+          cover: values.cover,
           priority: values.priority,
         },
       }
@@ -86,6 +90,7 @@ async function handleSubmit(values: FormState) {
           title: values.title,
           slug: values.slug,
           description: values.description,
+          cover: values.cover,
           priority: values.priority,
         },
       }
@@ -131,6 +136,14 @@ async function handleSubmit(values: FormState) {
         :value="formState.description"
         validation="length:0,500"
         :auto-height="true"
+      />
+      <FormKit
+        type="text"
+        name="cover"
+        label="封面图"
+        help="填写可公开访问的图片地址，用于列表卡片和前台页面展示。"
+        :value="formState.cover"
+        validation="length:0,1000"
       />
       <FormKit
         type="number"

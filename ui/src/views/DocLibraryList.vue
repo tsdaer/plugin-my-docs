@@ -124,10 +124,22 @@ function handleDelete(library: DocLibrary) {
         <li v-for="library in data.items" :key="library.metadata.name">
           <VEntity>
             <template #start>
-              <VEntityField
-                :title="library.spec.title"
-                :description="library.spec.slug"
-              />
+              <div class="flex items-center gap-3">
+                <div
+                  v-if="library.spec.cover"
+                  class="h-12 w-16 overflow-hidden rounded-md border border-gray-200 bg-gray-50"
+                >
+                  <img
+                    :src="library.spec.cover"
+                    :alt="library.spec.title"
+                    class="h-full w-full object-cover"
+                  >
+                </div>
+                <VEntityField
+                  :title="library.spec.title"
+                  :description="library.spec.slug"
+                />
+              </div>
             </template>
             <template #end>
               <VEntityField v-if="library.spec.description">

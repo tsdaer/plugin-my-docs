@@ -1,10 +1,10 @@
 <nav xmlns:th="https://www.thymeleaf.org" th:fragment="tree(nodes, library, currentDoc)">
   <style>
     .mdocs-nav-list { list-style: none; margin: 14px 0 0; padding: 0; }
-    .mdocs-nav-list .mdocs-nav-list { margin-top: 4px; padding-left: 14px; border-left: 1px solid #e2e8f0; }
+    .mdocs-nav-list .mdocs-nav-list { margin-top: 4px; padding-left: 14px; border-left: 1px solid var(--mdocs-border); }
     .mdocs-nav-item { margin: 2px 0; }
-    .mdocs-nav-link { display: block; padding: 6px 8px; color: #475569; text-decoration: none; border-radius: 6px; font-size: 14px; line-height: 1.45; }
-    .mdocs-nav-link:hover, .mdocs-nav-link.is-active { color: #0f766e; background: #ecfdf5; }
+    .mdocs-nav-link { display: block; padding: 6px 8px; color: var(--mdocs-muted); text-decoration: none; border-radius: 6px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
+    .mdocs-nav-link:hover, .mdocs-nav-link.is-active { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
   </style>
   <ul class="mdocs-nav-list" th:if="${!#lists.isEmpty(nodes)}">
     <li class="mdocs-nav-item" th:each="node : ${nodes}">
