@@ -1,6 +1,12 @@
 package com.github.mydocs;
 
+import com.github.mydocs.extension.Doc;
+import com.github.mydocs.extension.DocLibrary;
+import java.util.Set;
 import org.springframework.stereotype.Component;
+import run.halo.app.extension.Scheme;
+import run.halo.app.extension.SchemeManager;
+import run.halo.app.extension.index.IndexSpecs;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
 
@@ -15,17 +21,39 @@ import run.halo.app.plugin.PluginContext;
 @Component
 public class MyDocsPlugin extends BasePlugin {
 
-    public MyDocsPlugin(PluginContext pluginContext) {
+    private final SchemeManager schemeManager;
+
+    public MyDocsPlugin(PluginContext pluginContext, SchemeManager schemeManager) {
         super(pluginContext);
+        this.schemeManager = schemeManager;
     }
 
     @Override
     public void start() {
-        System.out.println("插件启动成功！");
+        schemeManager.register(DocLibrary.class, indexSpecs -> {
+            indexSpecs.add(IndexSpecs.<DocLibrary, String>single("spec.slug", String.class)
+                .unique(true)
+                .nullable(false)
+                .indexFunc(lib -> lib.getSpec().getSlug()));
+            indexSpecs.add(IndexSpecs.<DocLibrary, Integer>single("spec.priority", Integer.class)
+                .indexFunc(lib -> lib.getSpec().getPriority()));
+        });
+
+        schemeManager.register(Doc.class, indexSpecs -> {
+            indexSpecs.add(IndexSpecs.<Doc, String>single("spec.slug", String.class)
+                .indexFunc(doc -> doc.getSpec().getSlug()));
+            indexSpecs.add(IndexSpecs.<Doc, String>single("spec.libraryName", String.class)
+                .indexFunc(doc -> doc.getSpec().getLibraryName()));
+            indexSpecs.add(IndexSpecs.<Doc, String>single("spec.parent", String.class)
+                .indexFunc(doc -> doc.getSpec().getParent()));
+            indexSpecs.add(IndexSpecs.<Doc, Integer>single("spec.priority", Integer.class)
+                .indexFunc(doc -> doc.getSpec().getPriority()));
+        });
     }
 
     @Override
     public void stop() {
-        System.out.println("插件停止！");
+        schemeManager.unregister(Scheme.buildFromType(Doc.class));
+        schemeManager.unregister(Scheme.buildFromType(DocLibrary.class));
     }
 }

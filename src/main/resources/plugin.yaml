@@ -15,8 +15,8 @@ spec:
   homepage: https://github.com/tsdaer/my-docs#readme
   repo: https://github.com/tsdaer/my-docs
   issues: https://github.com/tsdaer/my-docs/issues
-  displayName: "my-docs"
-  description: "my-docs - Halo 插件"
+  displayName: "文档"
+  description: "为 Halo 网站添加文档（知识库）功能：按库与层级组织内容，提供带侧边目录树的文档阅读界面。"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/tsdaer/my-docs/blob/main/LICENSE"
