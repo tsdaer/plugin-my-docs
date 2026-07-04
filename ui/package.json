@@ -18,6 +18,7 @@
     "tabWidth": 2
   },
   "dependencies": {
+    "@he-tree/vue": "^2.9.1",
     "@halo-dev/api-client": "^2.25.1",
     "@halo-dev/components": "^2.25.1",
     "@halo-dev/ui-shared": "^2.25.1",

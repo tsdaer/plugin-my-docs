@@ -17,6 +17,7 @@ const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
 
 const libraryName = computed(() => route.params.libraryName as string)
 const docName = computed(() => (route.query.name as string) || '')
+const parentName = computed(() => (route.query.parent as string) || '')
 const isUpdate = computed(() => !!docName.value)
 
 const loading = ref(false)
@@ -36,7 +37,8 @@ interface FormState {
 const formState = ref<FormState>({
   title: '',
   slug: '',
-  parent: '',
+  // 新建子文档时，父节点由路由 query.parent 预置（编辑模式会在 onMounted 覆盖）。
+  parent: parentName.value,
   priority: 0,
   published: false,
 })
