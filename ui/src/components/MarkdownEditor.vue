@@ -54,8 +54,18 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  vditor?.destroy()
+  // 仅在 Vditor 完成异步初始化（after 回调已触发）后才销毁：
+  // 若在初始化前卸载（如快速保存/返回），其内部状态未建立，destroy() 会
+  // 访问 this.vditor.element 抛错并打断路由导航。try/catch 再兜底一层。
+  if (ready.value && vditor) {
+    try {
+      vditor.destroy()
+    } catch (e) {
+      console.warn('[my-docs] Vditor destroy failed:', e)
+    }
+  }
   vditor = undefined
+  ready.value = false
 })
 </script>
 
