@@ -261,6 +261,7 @@ async function persistPositions() {
           :over-zone="overZone"
           :expanded="expanded"
           @toggle="handleToggle"
+          @open="handleEdit"
           @create-child="handleCreate"
           @edit="handleEdit"
           @delete="handleDelete"
