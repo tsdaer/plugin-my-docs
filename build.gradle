@@ -14,6 +14,14 @@ dependencies {
     implementation platform('run.halo.tools.platform:plugin:2.25.0')
     compileOnly 'run.halo.app:api'
 
+    // Markdown 渲染（打包进插件 jar，Halo API 不提供）。commonmark-java 各扩展与核心同版本。
+    implementation 'org.commonmark:commonmark:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-tables:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-task-list-items:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-autolink:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-heading-anchor:0.24.0'
+
     testImplementation 'run.halo.app:api'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
