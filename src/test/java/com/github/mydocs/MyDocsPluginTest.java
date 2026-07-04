@@ -9,11 +9,13 @@ import com.github.mydocs.extension.DocLibrary;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import run.halo.app.extension.SchemeManager;
 import run.halo.app.plugin.PluginContext;
+import run.halo.app.search.event.HaloDocumentRebuildRequestEvent;
 
 @ExtendWith(MockitoExtension.class)
 class MyDocsPluginTest {
@@ -24,6 +26,9 @@ class MyDocsPluginTest {
     @Mock
     SchemeManager schemeManager;
 
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     MyDocsPlugin plugin;
 
@@ -32,6 +37,7 @@ class MyDocsPluginTest {
         plugin.start();
         verify(schemeManager).register(eq(DocLibrary.class), any(Consumer.class));
         verify(schemeManager).register(eq(Doc.class), any(Consumer.class));
+        verify(eventPublisher).publishEvent(any(HaloDocumentRebuildRequestEvent.class));
     }
 
     @Test

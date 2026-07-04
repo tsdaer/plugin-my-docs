@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh" xmlns:th="https://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>文档</title>
+  <style>
+    body { margin: 0; color: #1f2937; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8fafc; }
+    .mdocs-page { max-width: 1120px; margin: 0 auto; padding: 48px 20px 72px; }
+    .mdocs-title { margin: 0 0 8px; font-size: 32px; line-height: 1.2; }
+    .mdocs-muted { color: #64748b; }
+    .mdocs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 28px; }
+    .mdocs-card { display: block; padding: 20px; color: inherit; text-decoration: none; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .mdocs-card:hover { border-color: #0f766e; box-shadow: 0 12px 30px rgba(15, 118, 110, .08); }
+    .mdocs-card h2 { margin: 0 0 8px; font-size: 20px; }
+    .mdocs-card p { margin: 0; line-height: 1.7; }
+  </style>
+</head>
+<body>
+  <main class="mdocs-page">
+    <h1 class="mdocs-title">文档</h1>
+    <p class="mdocs-muted" th:if="${#lists.isEmpty(libraries)}">暂无文档库。</p>
+    <section class="mdocs-grid" th:if="${!#lists.isEmpty(libraries)}">
+      <a class="mdocs-card" th:each="library : ${libraries}"
+         th:href="@{/docs/{librarySlug}(librarySlug=${library.spec.slug})}">
+        <h2 th:text="${library.spec.title}">Library</h2>
+        <p class="mdocs-muted" th:text="${library.spec.description}">Description</p>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

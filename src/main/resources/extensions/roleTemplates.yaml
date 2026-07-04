@@ -37,3 +37,18 @@ rules:
   - apiGroups: [""]
     resources: ["configmaps"]
     verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: my-docs-role-public
+  labels:
+    halo.run/role-template: "true"
+    halo.run/hidden: "true"
+    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
+rules:
+  - apiGroups: ["api.docs.halo.run"]
+    resources: ["libraries", "docs", "trees"]
+    verbs: ["get", "list"]
+  - nonResourceURLs: ["/apis/api.docs.halo.run/v1alpha1/**"]
+    verbs: ["get"]

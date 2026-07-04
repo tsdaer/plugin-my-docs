@@ -6,8 +6,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.github.mydocs.extension.Doc;
+import com.github.mydocs.extension.DocLibrary;
+import com.github.mydocs.search.DocSearchDocumentConverter;
 import com.github.mydocs.service.MarkdownRenderer;
 import java.util.Optional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,11 +26,15 @@ class DocReconcilerTest {
     @Mock
     ExtensionClient client;
 
+    @Mock
+    ApplicationEventPublisher eventPublisher;
+
     // 用真实渲染器，验证渲染结果确实写入 content
     final MarkdownRenderer markdownRenderer = new MarkdownRenderer();
+    final DocSearchDocumentConverter searchDocumentConverter = new DocSearchDocumentConverter();
 
     DocReconciler newReconciler() {
-        return new DocReconciler(client, markdownRenderer);
+        return new DocReconciler(client, markdownRenderer, searchDocumentConverter, eventPublisher);
     }
 
     private static Doc docWith(String raw, String content) {
@@ -70,11 +77,36 @@ class DocReconcilerTest {
     }
 
     @Test
+    void publishesSearchAddEventForPublishedDoc() {
+        var doc = docWith("# Hello", markdownRenderer.render("# Hello"));
+        doc.getSpec().setPublished(true);
+        when(client.fetch(Doc.class, "doc-1")).thenReturn(Optional.of(doc));
+        when(client.fetch(DocLibrary.class, "lib")).thenReturn(Optional.of(library("lib", "guide")));
+
+        newReconciler().reconcile(new Reconciler.Request("doc-1"));
+
+        verify(eventPublisher).publishEvent(
+            any(run.halo.app.search.event.HaloDocumentAddRequestEvent.class));
+    }
+
+    @Test
     void doesNothingWhenDocNotFound() {
         when(client.fetch(Doc.class, "missing")).thenReturn(Optional.empty());
 
         newReconciler().reconcile(new Reconciler.Request("missing"));
 
         verify(client, never()).update(any());
+    }
+
+    private static DocLibrary library(String name, String slug) {
+        var library = new DocLibrary();
+        var metadata = new Metadata();
+        metadata.setName(name);
+        library.setMetadata(metadata);
+        var spec = new DocLibrary.Spec();
+        spec.setTitle("Guide");
+        spec.setSlug(slug);
+        library.setSpec(spec);
+        return library;
     }
 }

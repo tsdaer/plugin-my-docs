@@ -3,12 +3,14 @@ package com.github.mydocs;
 import com.github.mydocs.extension.Doc;
 import com.github.mydocs.extension.DocLibrary;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import run.halo.app.extension.Scheme;
 import run.halo.app.extension.SchemeManager;
 import run.halo.app.extension.index.IndexSpecs;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
+import run.halo.app.search.event.HaloDocumentRebuildRequestEvent;
 
 /**
  * <p>Plugin main class to manage the lifecycle of the plugin.</p>
@@ -22,10 +24,13 @@ import run.halo.app.plugin.PluginContext;
 public class MyDocsPlugin extends BasePlugin {
 
     private final SchemeManager schemeManager;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public MyDocsPlugin(PluginContext pluginContext, SchemeManager schemeManager) {
+    public MyDocsPlugin(PluginContext pluginContext, SchemeManager schemeManager,
+        ApplicationEventPublisher eventPublisher) {
         super(pluginContext);
         this.schemeManager = schemeManager;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -49,6 +54,7 @@ public class MyDocsPlugin extends BasePlugin {
             indexSpecs.add(IndexSpecs.<Doc, Integer>single("spec.priority", Integer.class)
                 .indexFunc(doc -> doc.getSpec().getPriority()));
         });
+        eventPublisher.publishEvent(new HaloDocumentRebuildRequestEvent(this));
     }
 
     @Override

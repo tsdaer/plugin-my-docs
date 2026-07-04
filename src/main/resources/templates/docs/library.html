@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh" xmlns:th="https://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${library.spec.title}">文档库</title>
+  <style>
+    body { margin: 0; color: #1f2937; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; }
+    .mdocs-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; padding: 36px 20px 72px; }
+    .mdocs-sidebar { border-right: 1px solid #e2e8f0; padding-right: 20px; }
+    .mdocs-back { color: #0f766e; text-decoration: none; font-size: 14px; }
+    .mdocs-title { margin: 16px 0 8px; font-size: 32px; line-height: 1.2; }
+    .mdocs-muted { color: #64748b; line-height: 1.7; }
+    .mdocs-list { display: grid; gap: 10px; margin-top: 28px; }
+    .mdocs-doc-link { display: block; padding: 14px 16px; color: inherit; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .mdocs-doc-link:hover { border-color: #0f766e; color: #0f766e; }
+    @media (max-width: 760px) { .mdocs-layout { display: block; } .mdocs-sidebar { border-right: 0; border-bottom: 1px solid #e2e8f0; padding: 0 0 20px; margin-bottom: 24px; } }
+  </style>
+</head>
+<body>
+  <main class="mdocs-layout">
+    <aside class="mdocs-sidebar">
+      <a class="mdocs-back" th:href="@{/docs}">全部文档</a>
+      <div th:replace="~{plugin:my-docs:docs/modules/tree :: tree(nodes=${tree}, library=${library}, currentDoc=${null})}"></div>
+    </aside>
+    <section>
+      <h1 class="mdocs-title" th:text="${library.spec.title}">文档库</h1>
+      <p class="mdocs-muted" th:text="${library.spec.description}">Description</p>
+      <p class="mdocs-muted" th:if="${#lists.isEmpty(docs)}">暂无已发布文档。</p>
+      <div class="mdocs-list" th:if="${!#lists.isEmpty(docs)}">
+        <a class="mdocs-doc-link" th:each="doc : ${docs}"
+           th:href="@{/docs/{librarySlug}/{docSlug}(librarySlug=${library.spec.slug}, docSlug=${doc.spec.slug})}"
+           th:text="${doc.spec.title}">Doc</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
