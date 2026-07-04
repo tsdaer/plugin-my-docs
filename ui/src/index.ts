@@ -28,6 +28,36 @@ export default definePlugin({
         },
       },
     },
+    {
+      parentName: 'Root',
+      route: {
+        path: '/docs/libraries/:libraryName',
+        name: 'DocList',
+        component: defineAsyncComponent({
+          loader: () => import('./views/DocList.vue'),
+          loadingComponent: VLoading,
+        }),
+        meta: {
+          title: '文档管理',
+          permissions: ['plugin:my-docs:libraries:view'],
+        },
+      },
+    },
+    {
+      parentName: 'Root',
+      route: {
+        path: '/docs/libraries/:libraryName/editor',
+        name: 'DocEditor',
+        component: defineAsyncComponent({
+          loader: () => import('./views/DocEditor.vue'),
+          loadingComponent: VLoading,
+        }),
+        meta: {
+          title: '文档编辑',
+          permissions: ['plugin:my-docs:libraries:manage'],
+        },
+      },
+    },
   ],
   extensionPoints: {},
 })

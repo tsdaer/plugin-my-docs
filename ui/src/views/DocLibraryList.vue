@@ -17,6 +17,7 @@ import {
 } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiBook2Line from '~icons/ri/book-2-line'
@@ -26,6 +27,7 @@ import DocLibraryEditingModal from '@/components/DocLibraryEditingModal.vue'
 
 const api = new DocLibraryV1alpha1Api(undefined, '', axiosInstance)
 const queryClient = useQueryClient()
+const router = useRouter()
 
 const page = ref(1)
 const size = ref(20)
@@ -48,6 +50,10 @@ const { data, isLoading } = useQuery({
 function handleOpenCreate() {
   selectedLibrary.value = undefined
   editingModalVisible.value = true
+}
+
+function handleManageDocs(library: DocLibrary) {
+  router.push({ name: 'DocList', params: { libraryName: library.metadata.name } })
 }
 
 function handleOpenEdit(library: DocLibrary) {
@@ -138,6 +144,7 @@ function handleDelete(library: DocLibrary) {
               </VEntityField>
             </template>
             <template #dropdownItems>
+              <VDropdownItem @click="handleManageDocs(library)">管理文档</VDropdownItem>
               <VDropdownItem @click="handleOpenEdit(library)">编辑</VDropdownItem>
               <VDropdownItem type="danger" @click="handleDelete(library)">
                 删除
