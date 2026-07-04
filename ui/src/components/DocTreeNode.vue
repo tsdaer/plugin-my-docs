@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { VStatusDot, VDropdown, VDropdownItem, IconMore } from '@halo-dev/components'
 import RiArrowRightSLine from '~icons/ri/arrow-right-s-line'
+import RiDraggable from '~icons/ri/draggable'
 import type { DocTreeNode } from '@/utils/doc-tree'
 
 defineProps<{
@@ -52,12 +53,19 @@ function onDragOver(event: DragEvent, name: string) {
           'over-inside': overName === node.doc.metadata.name && overZone === 'inside',
           'over-after': overName === node.doc.metadata.name && overZone === 'after',
         }"
-        draggable="true"
-        @dragstart.stop="emit('node-dragstart', node.doc.metadata.name)"
-        @dragend.stop="emit('node-dragend')"
         @dragover.prevent.stop="onDragOver($event, node.doc.metadata.name)"
         @drop.prevent.stop="emit('node-drop')"
       >
+        <span
+          class="doc-tree-handle"
+          v-tooltip="'拖拽调整层级/排序'"
+          draggable="true"
+          @dragstart.stop="emit('node-dragstart', node.doc.metadata.name)"
+          @dragend.stop="emit('node-dragend')"
+        >
+          <RiDraggable />
+        </span>
+
         <button
           class="doc-tree-toggle"
           :class="{ 'is-open': expanded.has(node.doc.metadata.name) }"
@@ -133,11 +141,26 @@ function onDragOver(event: DragEvent, name: string) {
   padding: 6px 8px;
   border-radius: 4px;
   border: 1px solid transparent;
-  cursor: grab;
   user-select: none;
 }
 .doc-tree-row:hover {
   background-color: #f9fafb;
+}
+.doc-tree-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #d1d5db;
+  cursor: grab;
+  flex-shrink: 0;
+}
+.doc-tree-handle:hover {
+  color: #6b7280;
+}
+.doc-tree-handle:active {
+  cursor: grabbing;
 }
 .doc-tree-row.is-dragging {
   opacity: 0.4;

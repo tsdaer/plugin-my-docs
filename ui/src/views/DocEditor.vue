@@ -270,38 +270,46 @@ async function handleSave() {
           :actions="false"
           @submit="handleSave"
         >
-          <FormKit
-            v-model="formState.title"
-            type="text"
-            name="title"
-            label="标题"
-            validation="required|length:1,200"
-          />
-          <FormKit
-            v-model="formState.slug"
-            type="text"
-            name="slug"
-            label="别名"
-            help="访问别名，库内唯一，仅限小写字母、数字与连字符"
-            :validation="[['required'], ['matches', /^[a-z0-9-]+$/], ['length', 1, 200]]"
-          />
-          <FormKit
-            v-model="formState.priority"
-            type="number"
-            name="priority"
-            label="排序"
-            help="同级排序权重，值越小越靠前"
-            validation="number"
-          />
-          <FormKit
-            v-model="formState.published"
-            type="switch"
-            name="published"
-            label="发布"
-          />
+          <div class="doc-editor-meta">
+            <div class="doc-editor-meta-title">
+              <FormKit
+                v-model="formState.title"
+                type="text"
+                name="title"
+                label="标题"
+                validation="required|length:1,200"
+              />
+            </div>
+            <div class="doc-editor-meta-slug">
+              <FormKit
+                v-model="formState.slug"
+                type="text"
+                name="slug"
+                label="别名"
+                :validation="[['required'], ['matches', /^[a-z0-9-]+$/], ['length', 1, 200]]"
+              />
+            </div>
+            <div class="doc-editor-meta-priority">
+              <FormKit
+                v-model="formState.priority"
+                type="number"
+                name="priority"
+                label="排序"
+                validation="number"
+              />
+            </div>
+            <div class="doc-editor-meta-published">
+              <FormKit
+                v-model="formState.published"
+                type="switch"
+                name="published"
+                label="发布"
+              />
+            </div>
+          </div>
         </FormKit>
 
-        <div class="mt-4">
+        <div class="mt-2">
           <MarkdownEditor v-model="raw" height="60vh" />
         </div>
       </template>
@@ -339,5 +347,32 @@ async function handleSave() {
 .doc-editor-main {
   flex: 1;
   min-width: 0;
+}
+/* 元信息紧凑横向排列，给正文腾空间：标题占主，其余按内容宽。 */
+.doc-editor-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 16px;
+}
+.doc-editor-meta-title {
+  flex: 1 1 240px;
+  min-width: 200px;
+}
+.doc-editor-meta-slug {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+.doc-editor-meta-priority {
+  flex: 0 0 90px;
+}
+.doc-editor-meta-published {
+  flex: 0 0 auto;
+  align-self: center;
+  padding-top: 4px;
+}
+/* 收紧 FormKit 默认的外边距，减少纵向占用。 */
+.doc-editor-meta :deep(.formkit-outer) {
+  margin-bottom: 8px;
 }
 </style>
