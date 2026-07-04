@@ -14,6 +14,7 @@ import {
   Dialog,
   Toast,
   IconAddCircle,
+  IconSettings,
 } from '@halo-dev/components'
 import { utils } from '@halo-dev/ui-shared'
 import { ref } from 'vue'
@@ -91,6 +92,12 @@ function handleDelete(library: DocLibrary) {
           <IconAddCircle />
         </template>
         新建文档库
+      </VButton>
+      <VButton @click="router.push({ name: 'DocSettings' })">
+        <template #icon>
+          <IconSettings />
+        </template>
+        设置
       </VButton>
     </template>
   </VPageHeader>
