@@ -1,0 +1,22 @@
+# Refer https://docs.halo.run/developer-guide/plugin/basics/manifest
+
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # The name defines how the plugin is invoked, A unique name
+  name: my-docs
+spec:
+  enabled: true
+  requires: ">=2.25.0"
+  author:
+    name: tsdaer
+    website: https://github.com/tsdaer
+  logo: logo.png
+  homepage: https://github.com/tsdaer/my-docs#readme
+  repo: https://github.com/tsdaer/my-docs
+  issues: https://github.com/tsdaer/my-docs/issues
+  displayName: "my-docs"
+  description: "my-docs - Halo 插件"
+  license:
+    - name: "GPL-3.0"
+      url: "https://github.com/tsdaer/my-docs/blob/main/LICENSE"

@@ -1,0 +1,39 @@
+plugins {
+    id 'base'
+    id "com.github.node-gradle.node" version "7.1.0"
+}
+
+group 'com.github.mydocs.ui'
+
+tasks.named('pnpmInstall') {
+    // pnpm 的 node_modules/.pnpm 目录使用符号链接，Gradle 对其做状态快照时会因
+    // "not a regular file" 报错。禁用状态跟踪以避免快照失败。
+    doNotTrackState('pnpm node_modules contains symlinks that cannot be snapshotted')
+}
+
+tasks.register('pnpmBuild', PnpmTask) {
+    group = 'build'
+    description = 'Build the UI project using pnpm'
+    args = ['build']
+    dependsOn tasks.named('pnpmInstall')
+    inputs.dir(layout.projectDirectory.dir('src'))
+    inputs.files(fileTree(
+        dir: layout.projectDirectory,
+        includes: ['*.cjs', '*.ts', '*.js', '*.json', '*.yaml']))
+    outputs.dir(layout.buildDirectory.dir('dist'))
+}
+
+tasks.register('pnpmCheck', PnpmTask) {
+    group = 'verification'
+    description = 'Run unit tests for the UI project using pnpm'
+    args = ['test:unit']
+    dependsOn tasks.named('pnpmInstall')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('pnpmCheck')
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('pnpmBuild')
+}
