@@ -1,6 +1,7 @@
 import { definePlugin } from '@halo-dev/ui-shared'
-import { IconPlug } from '@halo-dev/components'
-import { markRaw } from 'vue'
+import { VLoading } from '@halo-dev/components'
+import { defineAsyncComponent, markRaw } from 'vue'
+import RiBook2Line from '~icons/ri/book-2-line'
 
 export default definePlugin({
   components: {},
@@ -8,17 +9,21 @@ export default definePlugin({
     {
       parentName: 'Root',
       route: {
-        path: '/example',
-        name: 'Example',
-        component: () => import(/* webpackChunkName: "HomeView" */ './views/HomeView.vue'),
+        path: '/docs',
+        name: 'DocLibraries',
+        component: defineAsyncComponent({
+          loader: () => import('./views/DocLibraryList.vue'),
+          loadingComponent: VLoading,
+        }),
         meta: {
-          title: '示例页面',
+          title: '文档',
           searchable: true,
+          permissions: ['plugin:my-docs:libraries:view'],
           menu: {
-            name: '示例页面',
-            group: '示例分组',
-            icon: markRaw(IconPlug),
-            priority: 0,
+            name: '文档',
+            group: 'content',
+            icon: markRaw(RiBook2Line),
+            priority: 40,
           },
         },
       },

@@ -1,0 +1,36 @@
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: my-docs-role-view
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "文档管理"
+    rbac.authorization.halo.run/display-name: "文档查看"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:my-docs:libraries:view"]
+rules:
+  - apiGroups: ["docs.halo.run"]
+    resources: ["doclibraries", "docs"]
+    verbs: ["get", "list"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: my-docs-role-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["my-docs-role-view"]
+    rbac.authorization.halo.run/module: "文档管理"
+    rbac.authorization.halo.run/display-name: "文档管理"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:my-docs:libraries:manage"]
+rules:
+  - apiGroups: ["docs.halo.run"]
+    resources: ["doclibraries", "docs"]
+    verbs: ["*"]
+  - apiGroups: ["console.api.docs.halo.run"]
+    resources: ["docs"]
+    verbs: ["*"]
