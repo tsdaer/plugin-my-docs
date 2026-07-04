@@ -1,19 +1,25 @@
 <script setup lang="ts">
-import { VButton, VPageHeader, VLoading, Toast } from '@halo-dev/components'
-import { computed, onMounted, ref } from 'vue'
+import { VButton, VPageHeader, VLoading, Dialog, Toast } from '@halo-dev/components'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQuery } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
+import RiMenuFoldLine from '~icons/ri/menu-fold-line'
+import RiMenuUnfoldLine from '~icons/ri/menu-unfold-line'
 import { DocV1alpha1Api } from '@/api/generated'
 import type { Doc } from '@/api/generated'
+import { buildDocTree, type DocTreeNode } from '@/utils/doc-tree'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
+import DocNavTree from '@/components/DocNavTree.vue'
+
+const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
+const MAX_DOCS = 200
 
 const route = useRoute()
 const router = useRouter()
 
 const docApi = new DocV1alpha1Api(undefined, '', axiosInstance)
-
-const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
 
 const libraryName = computed(() => route.params.libraryName as string)
 const docName = computed(() => (route.query.name as string) || '')
@@ -34,19 +40,107 @@ interface FormState {
   published: boolean
 }
 
-const formState = ref<FormState>({
-  title: '',
-  slug: '',
-  // 新建子文档时，父节点由路由 query.parent 预置（编辑模式会在 onMounted 覆盖）。
-  parent: parentName.value,
-  priority: 0,
-  published: false,
-})
-
+const formState = ref<FormState>(emptyForm())
 const raw = ref('')
 
-onMounted(async () => {
+// 加载完成时的快照，用于 dirty 检测。
+const baseline = ref('')
+
+function emptyForm(): FormState {
+  return {
+    title: '',
+    slug: '',
+    parent: parentName.value,
+    priority: 0,
+    published: false,
+  }
+}
+
+function snapshot(): string {
+  return JSON.stringify({ ...formState.value, raw: raw.value })
+}
+
+const dirty = computed(() => snapshot() !== baseline.value)
+
+// ---- 侧边导航树 ----
+const { data: navData } = useQuery({
+  queryKey: ['docs', libraryName],
+  queryFn: async () => {
+    const { data } = await docApi.listDoc({
+      page: 1,
+      size: MAX_DOCS,
+      fieldSelector: [`spec.libraryName=${libraryName.value}`],
+      sort: ['spec.priority,asc', 'metadata.creationTimestamp,desc'],
+    })
+    return data
+  },
+})
+
+const navTree = computed<DocTreeNode[]>(() => buildDocTree(navData.value?.items ?? []))
+const navExpanded = ref<Set<string>>(new Set())
+const collapsed = ref(false)
+
+watch(
+  navData,
+  (value) => {
+    // 默认展开所有含子节点的节点。
+    const next = new Set<string>()
+    const collect = (nodes: DocTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.children.length) {
+          next.add(n.doc.metadata.name)
+          collect(n.children)
+        }
+      }
+    }
+    collect(buildDocTree(value?.items ?? []))
+    navExpanded.value = next
+  },
+  { immediate: true },
+)
+
+function handleNavToggle(name: string) {
+  const next = new Set(navExpanded.value)
+  if (next.has(name)) {
+    next.delete(name)
+  } else {
+    next.add(name)
+  }
+  navExpanded.value = next
+}
+
+// 点击侧边树切换文档：有未保存改动先确认。
+function handleNavSelect(name: string) {
+  if (name === docName.value) {
+    return
+  }
+  const go = () =>
+    router.push({
+      name: 'DocEditor',
+      params: { libraryName: libraryName.value },
+      query: { name },
+    })
+  if (dirty.value) {
+    Dialog.warning({
+      title: '放弃未保存的更改？',
+      description: '当前文档有未保存的更改，切换后将丢失。',
+      confirmType: 'danger',
+      onConfirm: go,
+    })
+  } else {
+    go()
+  }
+}
+
+// ---- 文档加载 / 切换 ----
+// 编辑页靠 route.query.name 驱动，同名路由切换不会重跑 onMounted，故抽出 loadDoc 并 watch。
+async function loadDoc() {
   if (!isUpdate.value) {
+    // 新建：重置为空表单。
+    original.value = undefined
+    formState.value = emptyForm()
+    raw.value = ''
+    baseline.value = snapshot()
     return
   }
   loading.value = true
@@ -61,16 +155,21 @@ onMounted(async () => {
       published: data.spec.published ?? false,
     }
     raw.value = data.spec.raw ?? ''
+    baseline.value = snapshot()
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(loadDoc)
+watch(docName, loadDoc)
 
 function handleBack() {
   router.push({ name: 'DocList', params: { libraryName: libraryName.value } })
 }
 
-async function handleSave(values: FormState) {
+async function handleSave() {
+  const values = formState.value
   saving.value = true
   try {
     if (isUpdate.value && original.value) {
@@ -109,6 +208,8 @@ async function handleSave(values: FormState) {
       }
       await axiosInstance.post(DOC_ENDPOINT, toCreate)
     }
+    // 保存成功后刷新 baseline，dirty 归零。
+    baseline.value = snapshot()
     Toast.success('保存成功')
     handleBack()
   } finally {
@@ -126,61 +227,117 @@ async function handleSave(values: FormState) {
         </template>
         返回
       </VButton>
-      <VButton
-        type="secondary"
-        :loading="saving"
-        @click="$formkit.submit('doc-form')"
-      >
-        保存
-      </VButton>
+      <VButton type="secondary" :loading="saving" @click="handleSave"> 保存 </VButton>
     </template>
   </VPageHeader>
 
-  <div class="m-0 md:m-4">
-    <VLoading v-if="loading" />
-
-    <template v-else>
-      <FormKit
-        id="doc-form"
-        type="form"
-        name="doc-form"
-        :actions="false"
-        @submit="handleSave"
-      >
-        <FormKit
-          type="text"
-          name="title"
-          label="标题"
-          :value="formState.title"
-          validation="required|length:1,200"
+  <div class="doc-editor-layout m-0 md:m-4">
+    <aside v-if="!collapsed" class="doc-editor-aside">
+      <div class="doc-editor-aside-head">
+        <span class="text-sm font-medium text-gray-700">文档目录</span>
+        <RiMenuFoldLine
+          v-tooltip="'收起目录'"
+          class="cursor-pointer text-gray-500 hover:text-gray-900"
+          @click="collapsed = true"
         />
-        <FormKit
-          type="text"
-          name="slug"
-          label="别名"
-          help="访问别名，库内唯一，仅限小写字母、数字与连字符"
-          :value="formState.slug"
-          :validation="[['required'], ['matches', /^[a-z0-9-]+$/], ['length', 1, 200]]"
-        />
-        <FormKit
-          type="number"
-          name="priority"
-          label="排序"
-          help="同级排序权重，值越小越靠前"
-          :value="formState.priority"
-          validation="number"
-        />
-        <FormKit
-          type="switch"
-          name="published"
-          label="发布"
-          :value="formState.published"
-        />
-      </FormKit>
-
-      <div class="mt-4">
-        <MarkdownEditor v-model="raw" height="60vh" />
       </div>
-    </template>
+      <div class="doc-editor-aside-body">
+        <DocNavTree
+          :nodes="navTree"
+          :active-name="docName"
+          :expanded="navExpanded"
+          @toggle="handleNavToggle"
+          @select="handleNavSelect"
+        />
+      </div>
+    </aside>
+
+    <div class="doc-editor-main">
+      <RiMenuUnfoldLine
+        v-if="collapsed"
+        v-tooltip="'展开目录'"
+        class="mb-2 cursor-pointer text-gray-500 hover:text-gray-900"
+        @click="collapsed = false"
+      />
+
+      <VLoading v-if="loading" />
+
+      <template v-else>
+        <FormKit
+          id="doc-form"
+          type="form"
+          name="doc-form"
+          :actions="false"
+          @submit="handleSave"
+        >
+          <FormKit
+            v-model="formState.title"
+            type="text"
+            name="title"
+            label="标题"
+            validation="required|length:1,200"
+          />
+          <FormKit
+            v-model="formState.slug"
+            type="text"
+            name="slug"
+            label="别名"
+            help="访问别名，库内唯一，仅限小写字母、数字与连字符"
+            :validation="[['required'], ['matches', /^[a-z0-9-]+$/], ['length', 1, 200]]"
+          />
+          <FormKit
+            v-model="formState.priority"
+            type="number"
+            name="priority"
+            label="排序"
+            help="同级排序权重，值越小越靠前"
+            validation="number"
+          />
+          <FormKit
+            v-model="formState.published"
+            type="switch"
+            name="published"
+            label="发布"
+          />
+        </FormKit>
+
+        <div class="mt-4">
+          <MarkdownEditor v-model="raw" height="60vh" />
+        </div>
+      </template>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.doc-editor-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.doc-editor-aside {
+  width: 260px;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+.doc-editor-aside-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.doc-editor-aside-body {
+  padding: 8px;
+  overflow-y: auto;
+}
+.doc-editor-main {
+  flex: 1;
+  min-width: 0;
+}
+</style>

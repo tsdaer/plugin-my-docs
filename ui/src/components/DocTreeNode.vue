@@ -15,6 +15,7 @@ defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle', name: string): void
+  (e: 'open', node: DocTreeNode): void
   (e: 'create-child', parent: string): void
   (e: 'edit', node: DocTreeNode): void
   (e: 'delete', node: DocTreeNode): void
@@ -68,7 +69,13 @@ function onDragOver(event: DragEvent, name: string) {
         </button>
 
         <div class="doc-tree-main">
-          <span class="doc-tree-title">{{ node.doc.spec.title }}</span>
+          <span
+            class="doc-tree-title"
+            v-tooltip="'点击编辑'"
+            @click.stop="emit('open', node)"
+          >
+            {{ node.doc.spec.title }}
+          </span>
           <span class="doc-tree-slug">{{ node.doc.spec.slug }}</span>
           <VStatusDot
             v-tooltip="node.doc.spec.published ? '已发布' : '草稿'"
@@ -96,6 +103,7 @@ function onDragOver(event: DragEvent, name: string) {
           :over-zone="overZone"
           :expanded="expanded"
           @toggle="emit('toggle', $event)"
+          @open="emit('open', $event)"
           @create-child="emit('create-child', $event)"
           @edit="emit('edit', $event)"
           @delete="emit('delete', $event)"
@@ -170,6 +178,11 @@ function onDragOver(event: DragEvent, name: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+.doc-tree-title:hover {
+  color: #4f46e5;
+  text-decoration: underline;
 }
 .doc-tree-slug {
   font-size: 12px;
