@@ -21,4 +21,4 @@ spec:
   configMapName: my-docs-configmap
   license:
     - name: "GPL-3.0"
-      url: "https://github.com/tsdaer/my-docs/blob/main/LICENSE"
+      url: "https://github.com/tsdaer/my-docs/blob/master/LICENSE"
