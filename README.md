@@ -1,92 +1,117 @@
 # my-docs
 
-一个为 [Halo](https://halo.run) 网站提供**文档（知识库）**功能的插件。
+一个为 [Halo](https://halo.run) 提供文档 / 知识库能力的插件。
 
-在博客文章之外，很多站点还需要一块结构化、可层级组织、带侧边目录导航的内容区域——例如产品手册、开发文档、帮助中心。`my-docs` 通过独立的文档模型和文档站点前台，把这类内容与普通文章分离管理。
+`my-docs` 在 Halo 原有文章与页面模型之外，补充一套独立的文档系统，用来承载产品手册、开发文档、帮助中心这类需要树形目录和连续阅读体验的内容。
 
-> ⚠️ 当前处于早期开发阶段。后端数据模型（文档库 / 文档）与注册已完成，管理界面与前台展示仍在开发中。开发路线见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)。
+项目开发路线见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)，发布前检查项见 [docs/release-checklist.md](./docs/release-checklist.md)。
 
-## 功能规划
+## 当前能力
 
-- 📚 **文档库（Docs）**：按「库 → 分组 → 文档」的层级组织内容
-- 🌲 **侧边目录树**：前台文档页自动生成可折叠的目录导航
-- ✍️ **富文本编辑**：复用 Halo 默认编辑器撰写文档内容
-- 🔗 **自定义别名（slug）**：为每篇文档生成友好的访问路径
-- 🔍 **站内搜索集成**：文档内容接入 Halo 搜索引擎
-- 🗂️ **排序与置顶**：控制文档在目录中的展示顺序
-- 🎨 **主题对接**：通过 Finder API 向主题暴露文档数据
+- 文档库管理：创建、编辑、删除文档库，支持描述与封面
+- 文档管理：按文档库维护文档，支持发布状态、slug、父子层级、排序权重
+- 树形编排：在 Console 中拖拽调整目录树与同级顺序
+- Markdown 编辑：使用独立编辑器编写 Markdown，后端渲染为 HTML
+- 前台展示：提供 `/docs`、`/docs/{librarySlug}`、`/docs/{librarySlug}/{docSlug}` 页面与侧边目录树
+- 公共访问接口：仅暴露已发布文档的前台只读 API，避免泄露草稿
+- 搜索与 SEO：已发布文档接入 Halo 搜索，并输出页面级 SEO 元信息
+- 插件设置与仪表盘：支持默认排序、分页数量、默认文档库等设置，并提供后台统计卡片
 
-各功能的实现阶段与优先级详见项目计划。
+## 当前状态
 
-## 技术栈
+当前主线里程碑 M0-M4 已完成，M5 正在推进，主要剩余项是：
 
-| 层         | 技术                                                       |
-| ---------- | ---------------------------------------------------------- |
-| 后端       | Java 21、Spring Boot、Spring WebFlux（响应式）             |
-| 数据模型   | Halo Extension（类 CRD 的自定义资源）                      |
-| 前端 Console | Vue 3 + TypeScript，@halo-dev/ui-shared / components     |
-| 前端构建   | Rsbuild（@halo-dev/ui-plugin-bundler-kit）                 |
-| 主题对接   | Thymeleaf 模板 + Finder API                                |
-| 构建       | Gradle + Halo Plugin DevTools                              |
+- 完善发布文档与界面截图
+- 等待 CI 在远端跑通并沉淀发布流程
+- 可选能力：评论系统集成
 
 ## 环境要求
 
 - Halo `>= 2.25.0`
 - Java 21+
-- Node.js 18+ 与 pnpm
-- Docker（`./gradlew haloServer` 本地运行 Halo 时需要）
+- Node.js 18+ 与 pnpm 10+
+- Docker（本地通过 `haloServer` 启动 Halo 时需要）
 
-## 开发
+## 本地开发
 
 ```bash
-# 1. 安装前端依赖
+# 安装前端依赖
 cd ui
 pnpm install
 
-# 2. 启动前端构建（监听模式，自动重编译）
+# 前端监听构建
 pnpm dev
 
-# 3. 回到根目录，启动带插件的 Halo 服务（需 Docker）
+# 回到项目根目录，启动 Halo + 插件
 cd ..
 ./gradlew haloServer
 ```
 
-启动后访问 `http://localhost:8090/console`，默认账号密码为 `admin` / `admin`。
+默认后台地址：`http://localhost:8090/console`
 
-修改后端 Java 代码后热重载：
+默认账号密码：`admin` / `admin`
+
+后端改动后可使用：
 
 ```bash
 ./gradlew reload
-# 或持续监听
+# 或
 ./gradlew watch
 ```
 
-## 构建
+## 测试与构建
 
 ```bash
+# 后端测试
+./gradlew test
+
+# 整体构建（含 UI 检查、单测、打包）
 ./gradlew build
 ```
 
-产物为 `build/libs/` 目录下的插件 jar 文件，可在 Halo 控制台「插件」页面上传安装。
+构建产物位于 `build/libs/`，当前插件 jar 名称示例：
+
+```text
+build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
+```
+
+## 功能概览
+
+### Console 管理端
+
+- 侧边栏「文档」入口与「文档设置」入口
+- 仪表盘文档统计组件
+- 文档库列表与编辑弹窗
+- 文档树管理页
+- 文档编辑页（导航树 + Markdown 编辑器）
+
+### 前台文档站点
+
+- 文档库首页：`/docs`
+- 单个文档库页：`/docs/{librarySlug}`
+- 文档详情页：`/docs/{librarySlug}/{docSlug}`
+- 可被主题覆盖的 Thymeleaf 模板：`src/main/resources/templates/docs/**`
+
+### 服务端能力
+
+- `DocLibrary`、`Doc` 自定义 Extension
+- 应用层 slug 唯一性校验
+- `DocReconciler` 自动将 Markdown 渲染为 HTML
+- `DocFinder` 向主题暴露已发布文档数据
+- `DocSearchDocumentsProvider` 接入 Halo 搜索
 
 ## 目录结构
 
-```
+```text
 plugin-my-docs/
-├── build.gradle                 # 插件后端构建配置
-├── settings.gradle
-├── gradle.properties            # 版本号
-├── src/main/
-│   ├── java/com/github/mydocs/  # 后端 Java 代码（插件主类、模型、API、Finder）
-│   └── resources/
-│       ├── plugin.yaml          # 插件清单（元数据、依赖、设置）
-│       ├── extensions/          # 声明式扩展资源（角色模板、反向代理等）
-│       └── templates/           # 主题前台 Thymeleaf 模板
-└── ui/                          # Console / 用户中心前端
-    ├── src/
-    │   ├── index.ts             # definePlugin 入口（路由、菜单、扩展点）
-    │   └── views/               # Vue 页面组件
-    └── rsbuild.config.ts
+├── src/main/java/com/github/mydocs/      # 插件后端代码
+├── src/main/resources/plugin.yaml        # 插件清单
+├── src/main/resources/extensions/        # 设置、角色模板等扩展资源
+├── src/main/resources/templates/docs/    # 前台模板
+├── src/test/java/com/github/mydocs/      # 后端测试
+├── ui/src/                               # Console 前端代码
+├── PROJECT_PLAN.md                       # 里程碑与设计计划
+└── docs/release-checklist.md             # 发布检查与截图清单
 ```
 
 ## 许可证
