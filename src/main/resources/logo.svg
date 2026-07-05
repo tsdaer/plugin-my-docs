@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="doc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b87fd"/>
+      <stop offset="1" stop-color="#0050b5"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0048af"/>
+      <stop offset="1" stop-color="#003580"/>
+    </linearGradient>
+  </defs>
+  <!-- 侧边目录栏 -->
+  <rect x="20" y="24" width="26" height="80" rx="8" fill="url(#side)"/>
+  <rect x="27" y="38" width="12" height="5" rx="2.5" fill="#ffffff" opacity="0.85"/>
+  <rect x="27" y="52" width="12" height="5" rx="2.5" fill="#ffffff" opacity="0.6"/>
+  <rect x="27" y="66" width="12" height="5" rx="2.5" fill="#ffffff" opacity="0.6"/>
+  <!-- 文档页 -->
+  <rect x="50" y="24" width="58" height="80" rx="10" fill="url(#doc)"/>
+  <rect x="62" y="42" width="34" height="6" rx="3" fill="#ffffff" opacity="0.95"/>
+  <rect x="62" y="58" width="34" height="6" rx="3" fill="#ffffff" opacity="0.75"/>
+  <rect x="62" y="74" width="24" height="6" rx="3" fill="#ffffff" opacity="0.75"/>
+</svg>

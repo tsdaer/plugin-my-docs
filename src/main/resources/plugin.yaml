@@ -11,7 +11,7 @@ spec:
   author:
     name: tsdaer
     website: https://github.com/tsdaer
-  logo: logo.png
+  logo: logo.svg
   homepage: https://github.com/tsdaer/my-docs#readme
   repo: https://github.com/tsdaer/my-docs
   issues: https://github.com/tsdaer/my-docs/issues
