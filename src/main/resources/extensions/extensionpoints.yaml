@@ -1,0 +1,19 @@
+apiVersion: plugin.halo.run/v1alpha1
+kind: ExtensionPointDefinition
+metadata:
+  name: my-docs-content-handler
+spec:
+  className: com.github.mydocs.extensionpoint.DocContentHandler
+  type: MULTI_INSTANCE
+  displayName: "文档内容后处理器"
+  description: "在文档正文 HTML 生成后、展示前对内容进行链式改写，如图片懒加载、代码高亮、内容注入等。"
+---
+apiVersion: plugin.halo.run/v1alpha1
+kind: ExtensionPointDefinition
+metadata:
+  name: my-docs-detail-model-handler
+spec:
+  className: com.github.mydocs.extensionpoint.DocDetailModelHandler
+  type: MULTI_INSTANCE
+  displayName: "文档阅读页 Model 注入器"
+  description: "向文档索引 / 库 / 详情阅读页的模板 model 注入额外数据或片段，供主题渲染，如相关文档、上一篇/下一篇、自定义侧栏块。"

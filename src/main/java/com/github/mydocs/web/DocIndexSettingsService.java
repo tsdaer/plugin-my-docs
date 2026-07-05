@@ -40,6 +40,8 @@ public class DocIndexSettingsService {
         normalized.setLibraryIndexPlacements(normalizePlacements(settings.getLibraryIndexPlacements()));
         normalized.setLibraryIndexFolderTitles(
             normalizeFolderTitles(settings.getLibraryIndexFolderTitles()));
+        normalized.setCustomHeadHtml(nullToEmpty(settings.getCustomHeadHtml()));
+        normalized.setCustomBodyHtml(nullToEmpty(settings.getCustomBodyHtml()));
         return normalized;
     }
 
@@ -161,6 +163,10 @@ public class DocIndexSettingsService {
             return fallback;
         }
         return Math.min(value, max);
+    }
+
+    private static String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private static DocIndexSettings defaultSettings() {

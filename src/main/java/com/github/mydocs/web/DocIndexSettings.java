@@ -19,6 +19,10 @@ public class DocIndexSettings {
 
     private List<LibraryFolderTitle> libraryIndexFolderTitles = new ArrayList<>();
 
+    private String customHeadHtml = "";
+
+    private String customBodyHtml = "";
+
     @Data
     public static class LibraryPageLayout {
         private Integer page;

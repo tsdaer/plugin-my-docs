@@ -12,6 +12,8 @@ export interface DocLibraryBackupRecord {
     description: string
     cover: string
     priority: number
+    customHeadHtml: string
+    customBodyHtml: string
   }
 }
 
@@ -27,6 +29,8 @@ export interface DocBackupRecord {
     rawType: string
     published: boolean
     publishTime: string | null
+    customHeadHtml: string
+    customBodyHtml: string
   }
 }
 
@@ -103,6 +107,8 @@ export function buildMyDocsBackup(
         description: optionalString(library.spec?.description),
         cover: optionalString(library.spec?.cover),
         priority: integer(library.spec?.priority, 0),
+        customHeadHtml: optionalString(library.spec?.customHeadHtml),
+        customBodyHtml: optionalString(library.spec?.customBodyHtml),
       },
     })),
   )
@@ -120,6 +126,8 @@ export function buildMyDocsBackup(
         rawType: optionalString(doc.spec?.rawType) || 'markdown',
         published: booleanValue(doc.spec?.published, false),
         publishTime: dateTimeOrNull(doc.spec?.publishTime),
+        customHeadHtml: optionalString(doc.spec?.customHeadHtml),
+        customBodyHtml: optionalString(doc.spec?.customBodyHtml),
       },
     })),
   )
@@ -150,6 +158,8 @@ function normalizeLibraryRecord(value: unknown, index: number): DocLibraryBackup
       description: optionalString(spec.description),
       cover: optionalString(spec.cover),
       priority: integer(spec.priority, 0),
+      customHeadHtml: optionalString(spec.customHeadHtml),
+      customBodyHtml: optionalString(spec.customBodyHtml),
     },
   }
 }
@@ -172,6 +182,8 @@ function normalizeDocRecord(value: unknown, index: number): DocBackupRecord {
       rawType: optionalString(spec.rawType) || 'markdown',
       published: booleanValue(spec.published, false),
       publishTime: dateTimeOrNull(spec.publishTime),
+      customHeadHtml: optionalString(spec.customHeadHtml),
+      customBodyHtml: optionalString(spec.customBodyHtml),
     },
   }
 }

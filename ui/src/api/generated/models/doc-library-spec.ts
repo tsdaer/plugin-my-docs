@@ -27,6 +27,18 @@ export interface DocLibrarySpec {
      */
     'cover'?: string;
     /**
+     * 该文档库专属：注入到库页与其下文档详情页 <body> 末尾的自定义代码（HTML/JS）
+     * @type {string}
+     * @memberof DocLibrarySpec
+     */
+    'customBodyHtml'?: string;
+    /**
+     * 该文档库专属：注入到库页与其下文档详情页 <head> 末尾的自定义代码（HTML/CSS）
+     * @type {string}
+     * @memberof DocLibrarySpec
+     */
+    'customHeadHtml'?: string;
+    /**
      * 文档库描述
      * @type {string}
      * @memberof DocLibrarySpec

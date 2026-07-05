@@ -33,6 +33,8 @@ interface FormState {
   description: string
   cover: string
   priority: number
+  customHeadHtml: string
+  customBodyHtml: string
 }
 
 const formState = ref<FormState>({
@@ -41,6 +43,8 @@ const formState = ref<FormState>({
   description: '',
   cover: '',
   priority: 0,
+  customHeadHtml: '',
+  customBodyHtml: '',
 })
 
 watch(
@@ -53,6 +57,8 @@ watch(
         description: value.spec.description ?? '',
         cover: value.spec.cover ?? '',
         priority: value.spec.priority ?? 0,
+        customHeadHtml: value.spec.customHeadHtml ?? '',
+        customBodyHtml: value.spec.customBodyHtml ?? '',
       }
     }
   },
@@ -72,6 +78,8 @@ async function handleSubmit(values: FormState) {
           description: values.description,
           cover: values.cover,
           priority: values.priority,
+          customHeadHtml: values.customHeadHtml,
+          customBodyHtml: values.customBodyHtml,
         },
       }
       await api.updateDocLibrary({
@@ -92,6 +100,8 @@ async function handleSubmit(values: FormState) {
           description: values.description,
           cover: values.cover,
           priority: values.priority,
+          customHeadHtml: values.customHeadHtml,
+          customBodyHtml: values.customBodyHtml,
         },
       }
       await api.createDocLibrary({ docLibrary: toCreate })
@@ -152,6 +162,22 @@ async function handleSubmit(values: FormState) {
         help="值越小越靠前"
         :value="formState.priority"
         validation="number"
+      />
+      <FormKit
+        type="textarea"
+        name="customHeadHtml"
+        label="自定义 head 代码"
+        help="⚠️ 原样注入到本库页与其下文档详情页 <head> 末尾，在访客浏览器执行。请仅填入可信代码。"
+        :value="formState.customHeadHtml"
+        :rows="4"
+      />
+      <FormKit
+        type="textarea"
+        name="customBodyHtml"
+        label="自定义 body 代码"
+        help="⚠️ 原样注入到本库页与其下文档详情页 <body> 末尾，在访客浏览器执行。请仅填入可信代码。"
+        :value="formState.customBodyHtml"
+        :rows="4"
       />
     </FormKit>
 

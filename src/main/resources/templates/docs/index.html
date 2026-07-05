@@ -9,6 +9,7 @@
   <meta property="og:description" th:content="${seo.description}">
   <meta property="og:type" th:content="${seo.ogType}">
   <th:block th:replace="~{plugin:my-docs:docs/modules/theme :: theme}"></th:block>
+  <th:block th:if="${!#strings.isEmpty(mdocsCustomHeadHtml)}" th:utext="${mdocsCustomHeadHtml}"></th:block>
   <style>
     body { margin: 0; color: var(--mdocs-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--mdocs-bg); transition: background-color .2s ease, color .2s ease; }
     .mdocs-page { max-width: 1120px; margin: 0 auto; padding: 48px 20px 72px; }
@@ -199,5 +200,6 @@
       });
     })();
   </script>
+  <th:block th:if="${!#strings.isEmpty(mdocsCustomBodyHtml)}" th:utext="${mdocsCustomBodyHtml}"></th:block>
 </body>
 </html>

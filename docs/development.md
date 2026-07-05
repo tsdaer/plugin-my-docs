@@ -79,6 +79,73 @@ build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
 - `DocReconciler` 自动将 Markdown 渲染为 HTML
 - `DocFinder` 向主题暴露已发布文档数据
 - `DocSearchDocumentsProvider` 接入 Halo 搜索
+- `extensionpoint` 包对外开放两个扩展点（SPI），供其他插件扩展前台阅读页，详见下文
+
+## 为 my-docs 编写扩展
+
+`my-docs` 通过 Halo 标准扩展点机制（`org.pf4j.ExtensionPoint` + `ExtensionPointDefinition`）
+对外开放两个扩展点，其他插件只需注册 Spring bean 即可介入前台阅读页，无需任何可视化配置。
+两个扩展点均为 `MULTI_INSTANCE`（可同时启用多个实现），定义见
+`src/main/resources/extensions/extensionpoints.yaml`。
+
+### 1. `DocContentHandler` —— 正文内容后处理
+
+在文档详情页正文 HTML 生成之后、展示之前进行链式改写（图片懒加载、代码高亮容器、内容注入等）。
+多个实现按 `getOrder()` 升序串成责任链；`my-docs` 内置的同库短链改写与大纲提取始终作为链的
+最后一环，因此扩展看到的是渲染后的原始正文，而内置后处理基于扩展改写后的最终 HTML。
+
+```java
+@Component
+public class LazyImageHandler implements DocContentHandler {
+    @Override
+    public Mono<DocContentContext> handle(DocContentContext context) {
+        // context.getDoc() / context.getLibrary() 为只读上下文
+        var html = context.getContent().replace("<img ", "<img loading=\"lazy\" ");
+        context.setContent(html);
+        return Mono.just(context);
+    }
+
+    @Override
+    public int getOrder() {
+        return 100; // 值越小越先执行
+    }
+}
+```
+
+### 2. `DocDetailModelHandler` —— 阅读页 Model 注入
+
+向索引页 / 库页 / 详情页的模板 model 注入额外数据或片段（相关文档、上一篇/下一篇、
+自定义侧栏块等），供主题模板渲染。通过 `DocModelContext.getPageType()`
+区分 `INDEX` / `LIBRARY` / `DETAIL` 三种页面；`library` / `doc` 按页面类型可能为空
+（INDEX 页两者皆空，LIBRARY 页仅有 `library`，DETAIL 页两者皆有）。
+单个 handler 抛错不会中断整页渲染，仅记录日志后跳过。建议注入的 model 键名带插件前缀以避免冲突。
+
+```java
+@Component
+public class RelatedDocsHandler implements DocDetailModelHandler {
+    @Override
+    public Mono<Void> handle(DocModelContext context) {
+        if (context.getPageType() != DocPageType.DETAIL) {
+            return Mono.empty();
+        }
+        // ... 计算相关文档
+        context.getModel().addAttribute("myPlugin_relatedDocs", relatedDocs);
+        return Mono.empty();
+    }
+}
+```
+
+### 实现插件如何声明依赖
+
+扩展插件需在自身 `plugin.yaml` 声明对 `my-docs` 的依赖，确保扩展点类在运行时可用：
+
+```yaml
+spec:
+  pluginDependencies:
+    "my-docs": ">=1.0.0"
+```
+
+若希望在 `my-docs` 未安装时仍能独立运行，改用 `optionalDependencies`。
 
 ## 目录结构
 

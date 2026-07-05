@@ -47,6 +47,8 @@ export interface MyDocsSettings {
   renderParagraphBeginningSpace: boolean
   renderCodeBlockPreview: boolean
   renderMathBlockPreview: boolean
+  customHeadHtml: string
+  customBodyHtml: string
 }
 
 export const defaultMyDocsSettings: MyDocsSettings = {
@@ -69,6 +71,8 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   renderParagraphBeginningSpace: false,
   renderCodeBlockPreview: true,
   renderMathBlockPreview: true,
+  customHeadHtml: '',
+  customBodyHtml: '',
 }
 
 function cloneDefaultSettings(): MyDocsSettings {
@@ -281,6 +285,8 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
         parsed.renderMathBlockPreview,
         defaultMyDocsSettings.renderMathBlockPreview,
       ),
+      customHeadHtml: readString(parsed.customHeadHtml, defaultMyDocsSettings.customHeadHtml),
+      customBodyHtml: readString(parsed.customBodyHtml, defaultMyDocsSettings.customBodyHtml),
     }
   } catch {
     return cloneDefaultSettings()

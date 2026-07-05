@@ -85,3 +85,15 @@ spec:
           name: renderMathBlockPreview
           label: 公式块即时渲染
           value: true
+        - $formkit: textarea
+          name: customHeadHtml
+          label: 全局自定义 head 代码
+          help: "⚠️ 原样注入到全部文档阅读页 <head> 末尾，在访客浏览器执行。可放 <style>、meta、统计脚本。请仅填入可信代码。"
+          value: ""
+          rows: 5
+        - $formkit: textarea
+          name: customBodyHtml
+          label: 全局自定义 body 代码
+          help: "⚠️ 原样注入到全部文档阅读页 <body> 末尾，在访客浏览器执行。可放自定义 HTML、<script>。请仅填入可信代码。"
+          value: ""
+          rows: 5

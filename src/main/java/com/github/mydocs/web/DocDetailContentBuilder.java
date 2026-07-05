@@ -1,6 +1,8 @@
 package com.github.mydocs.web;
 
 import com.github.mydocs.extension.Doc;
+import com.github.mydocs.extension.DocLibrary;
+import com.github.mydocs.extensionpoint.DocContentHandlerChain;
 import java.net.URI;
 import java.util.List;
 import lombok.Value;
@@ -9,22 +11,36 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Mono;
 
 /**
- * 为文档详情页补充展示层数据：统一解析同库短链接，并从正文 HTML 中提取标题大纲。
+ * 为文档详情页补充展示层数据：先经内容后处理扩展链（{@link DocContentHandlerChain}）改写正文，
+ * 再统一解析同库短链接、并从最终 HTML 中提取标题大纲。短链改写与大纲提取始终作为链的最后一环，
+ * 保证其基于扩展处理后的最终内容。
  */
 @Component
 public class DocDetailContentBuilder {
 
-    public DetailContent build(String librarySlug, Doc doc) {
+    private final DocContentHandlerChain contentHandlerChain;
+
+    public DocDetailContentBuilder(DocContentHandlerChain contentHandlerChain) {
+        this.contentHandlerChain = contentHandlerChain;
+    }
+
+    public Mono<DetailContent> build(DocLibrary library, Doc doc) {
         var content = spec(doc).getContent();
         if (!StringUtils.hasText(content)) {
-            return new DetailContent("", List.of());
+            return Mono.just(new DetailContent("", List.of()));
         }
 
-        Document document = Jsoup.parseBodyFragment(content);
-        rewriteSameLibraryLinks(document.body(), librarySlug);
-        return new DetailContent(document.body().html(), extractOutline(document.body()));
+        var librarySlug = library == null || library.getSpec() == null
+            ? null : library.getSpec().getSlug();
+        return contentHandlerChain.handle(content, doc, library)
+            .map(handledContent -> {
+                Document document = Jsoup.parseBodyFragment(handledContent);
+                rewriteSameLibraryLinks(document.body(), librarySlug);
+                return new DetailContent(document.body().html(), extractOutline(document.body()));
+            });
     }
 
     private void rewriteSameLibraryLinks(Element root, String librarySlug) {

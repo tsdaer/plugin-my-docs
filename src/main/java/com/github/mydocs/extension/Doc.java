@@ -67,5 +67,11 @@ public class Doc extends AbstractExtension {
 
         @Schema(description = "发布时间")
         private Instant publishTime;
+
+        @Schema(description = "该文档专属：注入到详情页 <head> 末尾的自定义代码（HTML/CSS）")
+        private String customHeadHtml;
+
+        @Schema(description = "该文档专属：注入到详情页 <body> 末尾的自定义代码（HTML/JS）")
+        private String customBodyHtml;
     }
 }

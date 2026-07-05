@@ -28,6 +28,7 @@ import {
   type LibraryRowLayoutSetting,
   type MyDocsSettings,
 } from '@/utils/my-docs-settings'
+import { SNIPPET_PROMPT, EXTENSION_PROMPT } from '@/utils/ai-prompts'
 
 const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
 const LIST_PAGE_SIZE = 200
@@ -289,6 +290,8 @@ async function persistSettings(normalized: MyDocsSettings) {
     renderParagraphBeginningSpace: !!normalized.renderParagraphBeginningSpace,
     renderCodeBlockPreview: !!normalized.renderCodeBlockPreview,
     renderMathBlockPreview: !!normalized.renderMathBlockPreview,
+    customHeadHtml: normalized.customHeadHtml ?? '',
+    customBodyHtml: normalized.customBodyHtml ?? '',
   }
 
   settingsState.value = finalSettings
@@ -353,6 +356,27 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return error.message
   }
   return fallback
+}
+
+async function copyPrompt(prompt: string, label: string) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(prompt)
+    } else {
+      // 降级：无 Clipboard API（如非 HTTPS）时用临时 textarea + execCommand。
+      const textarea = document.createElement('textarea')
+      textarea.value = prompt
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.append(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      textarea.remove()
+    }
+    Toast.success(`已复制「${label}」提示词，可直接粘贴给 AI`)
+  } catch {
+    Toast.warning('复制失败，请手动复制')
+  }
 }
 
 async function listAllLibraries(): Promise<DocLibrary[]> {
@@ -949,6 +973,49 @@ async function handleSubmit() {
               v-model="settingsState.renderMathBlockPreview"
             />
           </div>
+        </div>
+
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">全局自定义代码</h3>
+          <p class="doc-settings-help">
+            ⚠️ 以下代码会原样注入到全部文档阅读页，并在访客浏览器中执行。请仅填入你信任的代码——
+            恶意脚本可能危害访客安全。文档库与单篇文档也可分别配置各自的代码，注入顺序为 全局 → 文档库 → 文档。
+          </p>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="textarea"
+              name="customHeadHtml"
+              label="head 代码"
+              help="注入到 <head> 末尾，适合 <style>、meta、统计脚本。"
+              v-model="settingsState.customHeadHtml"
+              :rows="6"
+            />
+            <FormKit
+              type="textarea"
+              name="customBodyHtml"
+              label="body 代码"
+              help="注入到 <body> 末尾，适合自定义 HTML、<script>。"
+              v-model="settingsState.customBodyHtml"
+              :rows="6"
+            />
+          </div>
+        </div>
+
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">AI 辅助编写</h3>
+          <p class="doc-settings-help">
+            复制下面的提示词发给 AI 智能体（如 ChatGPT、Claude），它会按 my-docs 的规范帮你生成代码。
+            「后台代码片段」用于上方及文档库/文档的自定义代码输入框；「扩展插件开发」用于编写独立的
+            Halo 插件来扩展文档阅读页。复制后在提示词末尾补上你的具体需求即可。
+          </p>
+          <VSpace>
+            <VButton type="secondary" @click="copyPrompt(SNIPPET_PROMPT, '后台代码片段')">
+              复制「后台代码片段」提示词
+            </VButton>
+            <VButton type="secondary" @click="copyPrompt(EXTENSION_PROMPT, '扩展插件开发')">
+              复制「扩展插件开发」提示词
+            </VButton>
+          </VSpace>
         </div>
 
         <VSpace>

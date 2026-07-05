@@ -48,5 +48,11 @@ public class DocLibrary extends AbstractExtension {
 
         @Schema(description = "排序权重，值越小越靠前")
         private Integer priority;
+
+        @Schema(description = "该文档库专属：注入到库页与其下文档详情页 <head> 末尾的自定义代码（HTML/CSS）")
+        private String customHeadHtml;
+
+        @Schema(description = "该文档库专属：注入到库页与其下文档详情页 <body> 末尾的自定义代码（HTML/JS）")
+        private String customBodyHtml;
     }
 }

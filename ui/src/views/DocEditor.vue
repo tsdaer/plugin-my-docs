@@ -39,6 +39,8 @@ interface FormState {
   parent: string
   priority: number
   published: boolean
+  customHeadHtml: string
+  customBodyHtml: string
 }
 
 const formState = ref<FormState>(emptyForm())
@@ -54,6 +56,8 @@ function emptyForm(): FormState {
     parent: parentName.value,
     priority: 0,
     published: false,
+    customHeadHtml: '',
+    customBodyHtml: '',
   }
 }
 
@@ -162,6 +166,8 @@ async function loadDoc() {
       parent: data.spec.parent ?? '',
       priority: data.spec.priority ?? 0,
       published: data.spec.published ?? false,
+      customHeadHtml: data.spec.customHeadHtml ?? '',
+      customBodyHtml: data.spec.customBodyHtml ?? '',
     }
     raw.value = data.spec.raw ?? ''
     baseline.value = snapshot()
@@ -210,6 +216,8 @@ async function handleSave() {
           published: values.published,
           raw: raw.value,
           rawType: 'markdown',
+          customHeadHtml: values.customHeadHtml,
+          customBodyHtml: values.customBodyHtml,
         },
       }
       const { data } = await axiosInstance.put<Doc>(
@@ -234,6 +242,8 @@ async function handleSave() {
           published: values.published,
           raw: raw.value,
           rawType: 'markdown',
+          customHeadHtml: values.customHeadHtml,
+          customBodyHtml: values.customBodyHtml,
         },
       }
       const { data } = await axiosInstance.post<Doc>(DOC_ENDPOINT, toCreate)
@@ -343,6 +353,28 @@ async function handleSave() {
               />
             </div>
           </div>
+          <details class="doc-editor-custom-code">
+            <summary>自定义代码（本文档）</summary>
+            <p class="doc-editor-custom-code-hint">
+              ⚠️ 以下代码会原样注入到本文档详情页并在访客浏览器执行，请仅填入可信代码。注入顺序：全局 → 文档库 → 本文档。
+            </p>
+            <FormKit
+              v-model="formState.customHeadHtml"
+              type="textarea"
+              name="customHeadHtml"
+              label="head 代码"
+              help="注入到 <head> 末尾，适合 <style>、meta。"
+              :rows="4"
+            />
+            <FormKit
+              v-model="formState.customBodyHtml"
+              type="textarea"
+              name="customBodyHtml"
+              label="body 代码"
+              help="注入到 <body> 末尾，适合自定义 HTML、<script>。"
+              :rows="4"
+            />
+          </details>
         </FormKit>
 
         <div class="doc-editor-editor">
@@ -421,6 +453,20 @@ async function handleSave() {
 /* 收紧 FormKit 默认的外边距，减少纵向占用。 */
 .doc-editor-meta :deep(.formkit-outer) {
   margin-bottom: 8px;
+}
+.doc-editor-custom-code {
+  margin-bottom: 8px;
+}
+.doc-editor-custom-code summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #6b7280;
+  user-select: none;
+}
+.doc-editor-custom-code-hint {
+  margin: 8px 0;
+  font-size: 12px;
+  color: #b45309;
 }
 .doc-editor-editor {
   flex: 1;

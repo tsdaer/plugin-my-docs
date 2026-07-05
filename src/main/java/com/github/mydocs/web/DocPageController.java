@@ -1,5 +1,7 @@
 package com.github.mydocs.web;
 
+import com.github.mydocs.extensionpoint.DocDetailModelHandlerAggregator;
+import com.github.mydocs.extensionpoint.DocPageType;
 import com.github.mydocs.finder.DocFinder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Controller;
@@ -21,18 +23,21 @@ public class DocPageController {
     private final DocDetailContentBuilder detailContentBuilder;
     private final DocIndexSettingsService docIndexSettingsService;
     private final DocLibraryIndexLayoutBuilder docLibraryIndexLayoutBuilder;
+    private final DocDetailModelHandlerAggregator modelHandlerAggregator;
 
     public DocPageController(DocFinder docFinder, TemplateNameResolver templateNameResolver,
         DocPageSeoMetadataFactory seoMetadataFactory,
         DocDetailContentBuilder detailContentBuilder,
         DocIndexSettingsService docIndexSettingsService,
-        DocLibraryIndexLayoutBuilder docLibraryIndexLayoutBuilder) {
+        DocLibraryIndexLayoutBuilder docLibraryIndexLayoutBuilder,
+        DocDetailModelHandlerAggregator modelHandlerAggregator) {
         this.docFinder = docFinder;
         this.templateNameResolver = templateNameResolver;
         this.seoMetadataFactory = seoMetadataFactory;
         this.detailContentBuilder = detailContentBuilder;
         this.docIndexSettingsService = docIndexSettingsService;
         this.docLibraryIndexLayoutBuilder = docLibraryIndexLayoutBuilder;
+        this.modelHandlerAggregator = modelHandlerAggregator;
     }
 
     @GetMapping("/docs")
@@ -43,12 +48,14 @@ public class DocPageController {
                 docIndexSettingsService.fetch(),
                 templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/index")
             )
-            .map(tuple -> {
+            .flatMap(tuple -> {
                 model.addAttribute("libraries", tuple.getT1());
                 model.addAttribute("libraryLayout",
                     docLibraryIndexLayoutBuilder.build(tuple.getT1(), tuple.getT2(), page));
                 model.addAttribute("seo", seoMetadataFactory.forIndex());
-                return tuple.getT3();
+                return modelHandlerAggregator
+                    .apply(exchange, model, DocPageType.INDEX, null, null)
+                    .thenReturn(tuple.getT3());
             });
     }
 
@@ -62,12 +69,14 @@ public class DocPageController {
                 docFinder.tree(library.getMetadata().getName()),
                 docFinder.listPublishedDocs(library.getMetadata().getName()),
                 templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/library")
-            ).map(tuple -> {
+            ).flatMap(tuple -> {
                 model.addAttribute("library", library);
                 model.addAttribute("tree", tuple.getT1());
                 model.addAttribute("docs", tuple.getT2());
                 model.addAttribute("seo", seoMetadataFactory.forLibrary(library));
-                return tuple.getT3();
+                return modelHandlerAggregator
+                    .apply(exchange, model, DocPageType.LIBRARY, library, null)
+                    .thenReturn(tuple.getT3());
             }));
     }
 
@@ -81,14 +90,17 @@ public class DocPageController {
                 .switchIfEmpty(notFound())
                 .flatMap(doc -> Mono.zip(
                     docFinder.tree(library.getMetadata().getName()),
-                    templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/detail")
-                ).map(tuple -> {
+                    templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/detail"),
+                    detailContentBuilder.build(library, doc)
+                ).flatMap(tuple -> {
                     model.addAttribute("library", library);
                     model.addAttribute("doc", doc);
                     model.addAttribute("tree", tuple.getT1());
-                    model.addAttribute("detailContent", detailContentBuilder.build(librarySlug, doc));
+                    model.addAttribute("detailContent", tuple.getT3());
                     model.addAttribute("seo", seoMetadataFactory.forDetail(library, doc));
-                    return tuple.getT2();
+                    return modelHandlerAggregator
+                        .apply(exchange, model, DocPageType.DETAIL, library, doc)
+                        .thenReturn(tuple.getT2());
                 })));
     }
 
