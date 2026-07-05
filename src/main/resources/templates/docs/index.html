@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh" data-color-scheme="auto" xmlns:th="https://www.thymeleaf.org">
+<html lang="zh" xmlns:th="https://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,27 +14,190 @@
     .mdocs-page { max-width: 1120px; margin: 0 auto; padding: 48px 20px 72px; }
     .mdocs-title { margin: 0 0 8px; font-size: 32px; line-height: 1.2; color: var(--mdocs-text-strong); }
     .mdocs-muted { color: var(--mdocs-muted); }
-    .mdocs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 28px; }
-    .mdocs-card { display: block; padding: 20px; color: inherit; text-decoration: none; background: var(--mdocs-surface); border: 1px solid var(--mdocs-border); border-radius: 8px; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background-color .2s ease; }
+    .mdocs-layout { margin-top: 28px; display: flex; flex-direction: column; gap: 16px; }
+    .mdocs-row { display: grid; gap: 16px; }
+    .mdocs-pagination { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; flex-wrap: wrap; }
+    .mdocs-pagination-link,
+    .mdocs-pagination-current { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; height: 42px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--mdocs-border); background: var(--mdocs-surface); color: inherit; text-decoration: none; }
+    .mdocs-pagination-link:hover { border-color: var(--mdocs-accent); color: var(--mdocs-accent); }
+    .mdocs-pagination-current { border-color: var(--mdocs-accent); background: var(--mdocs-accent-soft); color: var(--mdocs-accent); font-weight: 700; }
+    .mdocs-slot { min-width: 0; }
+    .mdocs-slot--empty { min-height: 280px; border: 1px dashed var(--mdocs-border); border-radius: 18px; background: color-mix(in srgb, var(--mdocs-surface) 40%, transparent); opacity: .45; }
+    .mdocs-card,
+    .mdocs-folder { height: 100%; min-height: 280px; box-sizing: border-box; padding: 20px; background: var(--mdocs-surface); border: 1px solid var(--mdocs-border); border-radius: 18px; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background-color .2s ease; }
+    .mdocs-card { display: block; color: inherit; text-decoration: none; }
     .mdocs-card:hover { border-color: var(--mdocs-accent); box-shadow: var(--mdocs-shadow); transform: translateY(-2px); }
-    .mdocs-card-cover { display: block; width: calc(100% + 40px); height: 168px; margin: -20px -20px 16px; object-fit: cover; border-radius: 8px 8px 0 0; background: var(--mdocs-surface-soft); }
+    .mdocs-card-cover,
+    .mdocs-folder-cover { display: block; width: calc(100% + 40px); height: 168px; margin: -20px -20px 16px; object-fit: cover; border-radius: 18px 18px 0 0; background: var(--mdocs-surface-soft); }
     .mdocs-card h2 { margin: 0 0 8px; font-size: 20px; }
     .mdocs-card p { margin: 0; line-height: 1.7; }
+    .mdocs-folder { display: flex; flex-direction: column; overflow: hidden; cursor: pointer; text-align: left; color: inherit; width: 100%; }
+    button.mdocs-folder { appearance: none; font: inherit; }
+    .mdocs-folder-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .mdocs-folder-title { margin: 0; font-size: 20px; color: var(--mdocs-text-strong); }
+    .mdocs-folder-count { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 10px; border-radius: 999px; background: var(--mdocs-accent-soft); color: var(--mdocs-accent); font-size: 13px; font-weight: 600; }
+    .mdocs-folder-stack { display: flex; gap: 6px; margin: 2px 0 14px; }
+    .mdocs-folder-stack span { display: block; width: 22px; height: 14px; border-radius: 999px; background: linear-gradient(135deg, var(--mdocs-accent), color-mix(in srgb, var(--mdocs-accent) 55%, white)); opacity: .9; }
+    .mdocs-folder-desc { margin: 0 0 14px; line-height: 1.6; }
+    .mdocs-folder-hint { margin-top: auto; display: inline-flex; align-items: center; gap: 8px; color: var(--mdocs-accent); font-size: 13px; font-weight: 600; }
+    .mdocs-folder-hint::after { content: '>'; font-size: 14px; }
+    .mdocs-folder-link { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 12px; text-decoration: none; color: inherit; background: var(--mdocs-surface-soft); transition: background-color .2s ease, color .2s ease; }
+    .mdocs-folder-link:hover { background: var(--mdocs-accent-soft); color: var(--mdocs-accent); }
+    .mdocs-folder-link-main { min-width: 0; }
+    .mdocs-folder-link-title { min-width: 0; font-weight: 600; color: var(--mdocs-text-strong); }
+    .mdocs-folder-link-desc { margin-top: 4px; font-size: 13px; line-height: 1.5; color: var(--mdocs-muted); }
+    .mdocs-folder-link-slug { flex-shrink: 0; font-size: 12px; color: var(--mdocs-muted); }
+    .mdocs-folder-dialog { width: min(720px, calc(100vw - 32px)); border: 0; padding: 0; border-radius: 20px; color: var(--mdocs-text); background: var(--mdocs-surface); box-shadow: 0 28px 64px rgba(15, 23, 42, 0.32); }
+    .mdocs-folder-dialog::backdrop { background: rgba(2, 6, 23, 0.48); backdrop-filter: blur(4px); }
+    .mdocs-folder-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 14px; border-bottom: 1px solid var(--mdocs-border); }
+    .mdocs-folder-dialog-title { margin: 0; font-size: 24px; color: var(--mdocs-text-strong); }
+    .mdocs-folder-dialog-desc { margin: 8px 0 0; line-height: 1.7; color: var(--mdocs-muted); }
+    .mdocs-folder-dialog-close { appearance: none; border: 0; background: transparent; color: var(--mdocs-muted); font: inherit; font-size: 24px; line-height: 1; cursor: pointer; }
+    .mdocs-folder-dialog-body { display: flex; flex-direction: column; gap: 12px; padding: 18px 24px 24px; max-height: min(70vh, 720px); overflow: auto; }
+    @supports not (background: color-mix(in srgb, white 50%, black)) {
+      .mdocs-slot--empty { background: transparent; }
+    }
+    @media (max-width: 760px) {
+      .mdocs-page { padding-inline: 16px; }
+      .mdocs-row { grid-template-columns: 1fr !important; }
+      .mdocs-slot--empty { display: none; }
+      .mdocs-folder-dialog-head,
+      .mdocs-folder-dialog-body { padding-inline: 16px; }
+    }
   </style>
 </head>
 <body>
   <main class="mdocs-page">
     <h1 class="mdocs-title">文档</h1>
     <p class="mdocs-muted" th:if="${#lists.isEmpty(libraries)}">暂无文档库。</p>
-    <section class="mdocs-grid" th:if="${!#lists.isEmpty(libraries)}">
-      <a class="mdocs-card" th:each="library : ${libraries}"
-         th:href="@{/docs/{librarySlug}(librarySlug=${library.spec.slug})}">
-        <img class="mdocs-card-cover" th:if="${!#strings.isEmpty(library.spec.cover)}"
-             th:src="${library.spec.cover}" th:alt="${library.spec.title}">
-        <h2 th:text="${library.spec.title}">Library</h2>
-        <p class="mdocs-muted" th:text="${library.spec.description}">Description</p>
-      </a>
+    <section class="mdocs-layout" th:if="${!#lists.isEmpty(libraries)}">
+      <div class="mdocs-row" th:each="row : ${libraryLayout.currentPage.rows}"
+           th:style="'grid-template-columns: repeat(' + ${row.columns} + ', minmax(0, 1fr));'">
+        <div class="mdocs-slot" th:each="slot, slotStat : ${row.slots}">
+          <div class="mdocs-slot--empty" th:if="${slot.empty}" aria-hidden="true"></div>
+
+          <a class="mdocs-card" th:if="${!slot.empty and !slot.folder}"
+             th:href="@{/docs/{librarySlug}(librarySlug=${slot.library.spec.slug})}">
+            <img class="mdocs-card-cover" th:if="${!#strings.isEmpty(slot.library.spec.cover)}"
+                 th:src="${slot.library.spec.cover}" th:alt="${slot.library.spec.title}">
+            <h2 th:text="${slot.library.spec.title}">Library</h2>
+            <p class="mdocs-muted" th:text="${slot.library.spec.description}">Description</p>
+          </a>
+
+          <button class="mdocs-folder" th:if="${!slot.empty and slot.folder}"
+                  type="button"
+                  th:attr="data-folder-dialog=${'folder-dialog-' + row.index + '-' + slotStat.index}">
+            <img class="mdocs-folder-cover"
+                 th:if="${!#strings.isEmpty(slot.libraries[0].spec.cover)}"
+                 th:src="${slot.libraries[0].spec.cover}"
+                 th:alt="${slot.title}">
+            <div class="mdocs-folder-head">
+              <h2 class="mdocs-folder-title" th:text="${slot.title}">文件夹</h2>
+              <span class="mdocs-folder-count" th:text="${#lists.size(slot.libraries) + ' 项'}">2 项</span>
+            </div>
+            <div class="mdocs-folder-stack" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p class="mdocs-muted mdocs-folder-desc"
+               th:text="${#strings.isEmpty(slot.description) ? '点击后选择要进入的文档库。' : slot.description}">
+              点击后选择要进入的文档库。
+            </p>
+            <span class="mdocs-folder-hint">选择文档库</span>
+          </button>
+        </div>
+      </div>
     </section>
+
+    <nav class="mdocs-pagination" th:if="${libraryLayout.totalPages > 1}">
+      <a class="mdocs-pagination-link"
+         th:if="${libraryLayout.hasPreviousPage()}"
+         th:href="@{/docs(page=${libraryLayout.previousPageNumber()})}">上一页</a>
+      <th:block th:each="pageItem : ${libraryLayout.pages}">
+        <span class="mdocs-pagination-current"
+              th:if="${pageItem.index == libraryLayout.currentPageNumber}"
+              th:text="${pageItem.index}">1</span>
+        <a class="mdocs-pagination-link"
+           th:if="${pageItem.index != libraryLayout.currentPageNumber}"
+           th:href="@{/docs(page=${pageItem.index})}"
+           th:text="${pageItem.index}">2</a>
+      </th:block>
+      <a class="mdocs-pagination-link"
+         th:if="${libraryLayout.hasNextPage()}"
+         th:href="@{/docs(page=${libraryLayout.nextPageNumber()})}">下一页</a>
+    </nav>
+
+    <th:block th:each="row : ${libraryLayout.currentPage.rows}">
+      <th:block th:each="slot, slotStat : ${row.slots}">
+        <th:block th:if="${!slot.empty and slot.folder}">
+          <dialog class="mdocs-folder-dialog"
+                  th:attr="id=${'folder-dialog-' + row.index + '-' + slotStat.index}">
+            <div class="mdocs-folder-dialog-head">
+              <div>
+                <h2 class="mdocs-folder-dialog-title" th:text="${slot.title}">文件夹</h2>
+                <p class="mdocs-folder-dialog-desc"
+                   th:text="${#strings.isEmpty(slot.description) ? '请选择要进入的文档库。' : slot.description}">
+                  请选择要进入的文档库。
+                </p>
+              </div>
+              <button class="mdocs-folder-dialog-close" type="button" aria-label="关闭">×</button>
+            </div>
+            <div class="mdocs-folder-dialog-body">
+              <a class="mdocs-folder-link" th:each="library : ${slot.libraries}"
+                 th:href="@{/docs/{librarySlug}(librarySlug=${library.spec.slug})}">
+                <span class="mdocs-folder-link-main">
+                  <span class="mdocs-folder-link-title" th:text="${library.spec.title}">Library</span>
+                  <span class="mdocs-folder-link-desc"
+                        th:text="${#strings.isEmpty(library.spec.description) ? '进入该文档库查看全部文档。' : library.spec.description}">
+                    进入该文档库查看全部文档。
+                  </span>
+                </span>
+                <span class="mdocs-folder-link-slug" th:text="${library.spec.slug}">slug</span>
+              </a>
+            </div>
+          </dialog>
+        </th:block>
+      </th:block>
+    </th:block>
   </main>
+  <script>
+    (function () {
+      var openers = document.querySelectorAll('[data-folder-dialog]');
+      openers.forEach(function (opener) {
+        opener.addEventListener('click', function () {
+          var dialogId = opener.getAttribute('data-folder-dialog');
+          if (!dialogId) {
+            return;
+          }
+          var dialog = document.getElementById(dialogId);
+          if (!dialog || typeof dialog.showModal !== 'function') {
+            return;
+          }
+          dialog.showModal();
+        });
+      });
+
+      var dialogs = document.querySelectorAll('.mdocs-folder-dialog[id]');
+      dialogs.forEach(function (dialog) {
+        var closeButton = dialog.querySelector('.mdocs-folder-dialog-close');
+        if (closeButton) {
+          closeButton.addEventListener('click', function () {
+            dialog.close();
+          });
+        }
+        dialog.addEventListener('click', function (event) {
+          var rect = dialog.getBoundingClientRect();
+          var inside = rect.left <= event.clientX
+            && event.clientX <= rect.right
+            && rect.top <= event.clientY
+            && event.clientY <= rect.bottom;
+          if (!inside) {
+            dialog.close();
+          }
+        });
+      });
+    })();
+  </script>
 </body>
 </html>

@@ -124,7 +124,11 @@ function handleDelete(library: DocLibrary) {
         <li v-for="library in data.items" :key="library.metadata.name">
           <VEntity>
             <template #start>
-              <div class="flex items-center gap-3">
+              <button
+                class="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-gray-50"
+                type="button"
+                @click="handleManageDocs(library)"
+              >
                 <div
                   v-if="library.spec.cover"
                   class="h-12 w-16 overflow-hidden rounded-md border border-gray-200 bg-gray-50"
@@ -139,7 +143,7 @@ function handleDelete(library: DocLibrary) {
                   :title="library.spec.title"
                   :description="library.spec.slug"
                 />
-              </div>
+              </button>
             </template>
             <template #end>
               <VEntityField v-if="library.spec.description">

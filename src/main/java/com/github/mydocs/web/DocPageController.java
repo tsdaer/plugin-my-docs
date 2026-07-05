@@ -6,6 +6,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -17,22 +18,37 @@ public class DocPageController {
     private final DocFinder docFinder;
     private final TemplateNameResolver templateNameResolver;
     private final DocPageSeoMetadataFactory seoMetadataFactory;
+    private final DocDetailContentBuilder detailContentBuilder;
+    private final DocIndexSettingsService docIndexSettingsService;
+    private final DocLibraryIndexLayoutBuilder docLibraryIndexLayoutBuilder;
 
     public DocPageController(DocFinder docFinder, TemplateNameResolver templateNameResolver,
-        DocPageSeoMetadataFactory seoMetadataFactory) {
+        DocPageSeoMetadataFactory seoMetadataFactory,
+        DocDetailContentBuilder detailContentBuilder,
+        DocIndexSettingsService docIndexSettingsService,
+        DocLibraryIndexLayoutBuilder docLibraryIndexLayoutBuilder) {
         this.docFinder = docFinder;
         this.templateNameResolver = templateNameResolver;
         this.seoMetadataFactory = seoMetadataFactory;
+        this.detailContentBuilder = detailContentBuilder;
+        this.docIndexSettingsService = docIndexSettingsService;
+        this.docLibraryIndexLayoutBuilder = docLibraryIndexLayoutBuilder;
     }
 
     @GetMapping("/docs")
-    public Mono<String> index(ServerWebExchange exchange, Model model) {
-        return docFinder.listLibraries()
-            .zipWith(templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/index"))
+    public Mono<String> index(@RequestParam(name = "page", defaultValue = "1") int page,
+        ServerWebExchange exchange, Model model) {
+        return Mono.zip(
+                docFinder.listLibraries(),
+                docIndexSettingsService.fetch(),
+                templateNameResolver.resolveTemplateNameOrDefault(exchange, "docs/index")
+            )
             .map(tuple -> {
                 model.addAttribute("libraries", tuple.getT1());
+                model.addAttribute("libraryLayout",
+                    docLibraryIndexLayoutBuilder.build(tuple.getT1(), tuple.getT2(), page));
                 model.addAttribute("seo", seoMetadataFactory.forIndex());
-                return tuple.getT2();
+                return tuple.getT3();
             });
     }
 
@@ -70,6 +86,7 @@ public class DocPageController {
                     model.addAttribute("library", library);
                     model.addAttribute("doc", doc);
                     model.addAttribute("tree", tuple.getT1());
+                    model.addAttribute("detailContent", detailContentBuilder.build(librarySlug, doc));
                     model.addAttribute("seo", seoMetadataFactory.forDetail(library, doc));
                     return tuple.getT2();
                 })));

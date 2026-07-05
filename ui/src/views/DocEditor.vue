@@ -2,7 +2,7 @@
 import { VButton, VPageHeader, VLoading, Dialog, Toast } from '@halo-dev/components'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
 import RiMenuFoldLine from '~icons/ri/menu-fold-line'
@@ -18,6 +18,7 @@ const MAX_DOCS = 200
 
 const route = useRoute()
 const router = useRouter()
+const queryClient = useQueryClient()
 
 const docApi = new DocV1alpha1Api(undefined, '', axiosInstance)
 
@@ -77,6 +78,14 @@ const { data: navData } = useQuery({
 })
 
 const navTree = computed<DocTreeNode[]>(() => buildDocTree(navData.value?.items ?? []))
+const linkableDocs = computed(() =>
+  (navData.value?.items ?? [])
+    .map((doc) => ({
+      title: doc.spec.title,
+      slug: doc.spec.slug,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN')),
+)
 const navExpanded = ref<Set<string>>(new Set())
 const collapsed = ref(false)
 
@@ -186,7 +195,11 @@ async function handleSave() {
           rawType: 'markdown',
         },
       }
-      await axiosInstance.put(`${DOC_ENDPOINT}/${original.value.metadata.name}`, toUpdate)
+      const { data } = await axiosInstance.put<Doc>(
+        `${DOC_ENDPOINT}/${original.value.metadata.name}`,
+        toUpdate,
+      )
+      original.value = data
     } else {
       const toCreate: Doc = {
         apiVersion: 'docs.halo.run/v1alpha1',
@@ -206,12 +219,18 @@ async function handleSave() {
           rawType: 'markdown',
         },
       }
-      await axiosInstance.post(DOC_ENDPOINT, toCreate)
+      const { data } = await axiosInstance.post<Doc>(DOC_ENDPOINT, toCreate)
+      original.value = data
+      await router.replace({
+        name: 'DocEditor',
+        params: { libraryName: libraryName.value },
+        query: { name: data.metadata.name },
+      })
     }
     // 保存成功后刷新 baseline，dirty 归零。
     baseline.value = snapshot()
+    await queryClient.invalidateQueries({ queryKey: ['docs'] })
     Toast.success('保存成功')
-    handleBack()
   } finally {
     saving.value = false
   }
@@ -231,7 +250,7 @@ async function handleSave() {
     </template>
   </VPageHeader>
 
-  <div class="doc-editor-layout m-0 md:m-4">
+  <div class="doc-editor-layout m-0 md:mx-4 md:mt-4">
     <aside v-if="!collapsed" class="doc-editor-aside">
       <div class="doc-editor-aside-head">
         <span class="text-sm font-medium text-gray-700">文档目录</span>
@@ -309,8 +328,12 @@ async function handleSave() {
           </div>
         </FormKit>
 
-        <div class="mt-2">
-          <MarkdownEditor v-model="raw" height="60vh" />
+        <div class="doc-editor-editor">
+          <MarkdownEditor
+            v-model="raw"
+            height="100%"
+            :doc-links="linkableDocs"
+          />
         </div>
       </template>
     </div>
@@ -321,7 +344,10 @@ async function handleSave() {
 .doc-editor-layout {
   display: flex;
   gap: 16px;
-  align-items: flex-start;
+  align-items: stretch;
+  height: calc(100vh - 140px);
+  min-height: 0;
+  overflow: hidden;
 }
 .doc-editor-aside {
   width: 260px;
@@ -347,6 +373,10 @@ async function handleSave() {
 .doc-editor-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 /* 元信息紧凑横向排列，给正文腾空间：标题占主，其余按内容宽。 */
 .doc-editor-meta {
@@ -374,5 +404,15 @@ async function handleSave() {
 /* 收紧 FormKit 默认的外边距，减少纵向占用。 */
 .doc-editor-meta :deep(.formkit-outer) {
   margin-bottom: 8px;
+}
+.doc-editor-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.doc-editor-editor :deep(.markdown-editor-root) {
+  flex: 1;
+  min-height: 0;
 }
 </style>

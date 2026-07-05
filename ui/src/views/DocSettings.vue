@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { VButton, VCard, VLoading, VPageHeader, VSpace, Toast, IconSettings } from '@halo-dev/components'
+import { VButton, VCard, VLoading, VPageHeader, VSpace, Toast, IconSettings, Dialog } from '@halo-dev/components'
 import { coreApiClient, axiosInstance } from '@halo-dev/api-client'
 import type { ConfigMap } from '@halo-dev/api-client'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
@@ -13,6 +13,10 @@ import {
   defaultMyDocsSettings,
   parseMyDocsSettings,
   stringifyMyDocsSettings,
+  type LibraryFolderTitleSetting,
+  type LibraryPageLayoutSetting,
+  type LibraryPlacementSetting,
+  type LibraryRowLayoutSetting,
   type MyDocsSettings,
 } from '@/utils/my-docs-settings'
 
@@ -47,8 +51,14 @@ const { data: libraries, isLoading: isLibrariesLoading } = useQuery({
 const formKey = computed(() => configMap.value?.metadata.version ?? 'new')
 const isLoading = computed(() => isConfigLoading.value || isLibrariesLoading.value)
 
-const formState = computed<MyDocsSettings>(() =>
-  parseMyDocsSettings(configMap.value?.data?.[MY_DOCS_CONFIG_GROUP]),
+const settingsState = ref<MyDocsSettings>(parseMyDocsSettings())
+
+watch(
+  () => configMap.value?.data?.[MY_DOCS_CONFIG_GROUP],
+  (raw) => {
+    settingsState.value = parseMyDocsSettings(raw)
+  },
+  { immediate: true },
 )
 
 const libraryOptions = computed(() => [
@@ -59,30 +69,220 @@ const libraryOptions = computed(() => [
   })),
 ])
 
-async function handleSubmit(values: MyDocsSettings) {
-  const normalized: MyDocsSettings = {
-    defaultSort: values.defaultSort,
-    pageSize: Number(values.pageSize) || defaultMyDocsSettings.pageSize,
-    defaultLibraryName: values.defaultLibraryName ?? '',
-    renderContentTheme: values.renderContentTheme,
-    renderCodeTheme: values.renderCodeTheme?.trim() || defaultMyDocsSettings.renderCodeTheme,
-    renderLineNumber: !!values.renderLineNumber,
-    renderAutoSpace: !!values.renderAutoSpace,
-    renderGfmAutoLink: !!values.renderGfmAutoLink,
-    renderFootnotes: !!values.renderFootnotes,
-    renderMark: !!values.renderMark,
-    renderFixTermTypo: !!values.renderFixTermTypo,
-    renderParagraphBeginningSpace: !!values.renderParagraphBeginningSpace,
-    renderCodeBlockPreview: !!values.renderCodeBlockPreview,
-    renderMathBlockPreview: !!values.renderMathBlockPreview,
+const placementLibraryOptions = computed(() =>
+  (libraries.value ?? []).map((library) => ({
+    label: `${library.spec.title} (${library.spec.slug})`,
+    value: library.metadata.name,
+  })),
+)
+
+function createPageLayout(): LibraryPageLayoutSetting {
+  const nextPage =
+    Math.max(0, ...settingsState.value.libraryIndexPageLayouts.map((item) => item.page || 0)) + 1
+  return {
+    page: nextPage,
+    maxRows: settingsState.value.libraryIndexDefaultMaxRows,
   }
+}
+
+function createRowLayout(): LibraryRowLayoutSetting {
+  const nextRow =
+    Math.max(0, ...settingsState.value.libraryIndexRowLayouts.map((item) => item.row || 0)) + 1
+  return {
+    row: nextRow,
+    columns: settingsState.value.libraryIndexDefaultColumns,
+  }
+}
+
+function createPlacement(): LibraryPlacementSetting {
+  return {
+    libraryName: placementLibraryOptions.value[0]?.value ?? '',
+    row: 1,
+    column: 1,
+  }
+}
+
+function createFolderTitle(): LibraryFolderTitleSetting {
+  return {
+    row: 1,
+    column: 1,
+    title: '',
+    description: '',
+  }
+}
+
+function addPageLayout() {
+  settingsState.value.libraryIndexPageLayouts = [
+    ...settingsState.value.libraryIndexPageLayouts,
+    createPageLayout(),
+  ]
+}
+
+function addRowLayout() {
+  settingsState.value.libraryIndexRowLayouts = [
+    ...settingsState.value.libraryIndexRowLayouts,
+    createRowLayout(),
+  ]
+}
+
+function addPlacement() {
+  settingsState.value.libraryIndexPlacements = [
+    ...settingsState.value.libraryIndexPlacements,
+    createPlacement(),
+  ]
+}
+
+function addFolderTitle() {
+  settingsState.value.libraryIndexFolderTitles = [
+    ...settingsState.value.libraryIndexFolderTitles,
+    createFolderTitle(),
+  ]
+}
+
+function removePageLayout(index: number) {
+  settingsState.value.libraryIndexPageLayouts = settingsState.value.libraryIndexPageLayouts.filter(
+    (_, itemIndex) => itemIndex !== index,
+  )
+}
+
+function removeRowLayout(index: number) {
+  settingsState.value.libraryIndexRowLayouts = settingsState.value.libraryIndexRowLayouts.filter(
+    (_, itemIndex) => itemIndex !== index,
+  )
+}
+
+function removePlacement(index: number) {
+  settingsState.value.libraryIndexPlacements = settingsState.value.libraryIndexPlacements.filter(
+    (_, itemIndex) => itemIndex !== index,
+  )
+}
+
+function removeFolderTitle(index: number) {
+  settingsState.value.libraryIndexFolderTitles =
+    settingsState.value.libraryIndexFolderTitles.filter((_, itemIndex) => itemIndex !== index)
+}
+
+function coordinateLabel(row?: number, column?: number): string {
+  return `第 ${row || '-'} 行 / 第 ${column || '-'} 列`
+}
+
+function rowColumnsFor(settings: MyDocsSettings, row: number): number {
+  const rowLayout = settings.libraryIndexRowLayouts.find((item) => item.row === row)
+  return rowLayout?.columns || settings.libraryIndexDefaultColumns
+}
+
+function buildLayoutWarnings(settings: MyDocsSettings): string[] {
+  const issues: string[] = []
+  const libraryNames = new Set((libraries.value ?? []).map((library) => library.metadata.name))
+  const visiblePlacementKeys = new Set<string>()
+  const assignedLibraries = new Set<string>()
+
+  for (const placement of settings.libraryIndexPlacements) {
+    assignedLibraries.add(placement.libraryName)
+    const maxColumns = rowColumnsFor(settings, placement.row)
+    if (placement.column > maxColumns) {
+      issues.push(
+        `文档库坐标 ${coordinateLabel(placement.row, placement.column)} 超过了该行 ${maxColumns} 列，前台会隐藏该文档库。`,
+      )
+      continue
+    }
+    if (!libraryNames.has(placement.libraryName)) {
+      issues.push(`文档库坐标 ${coordinateLabel(placement.row, placement.column)} 指向了不存在的文档库。`)
+      continue
+    }
+    visiblePlacementKeys.add(`${placement.row}:${placement.column}`)
+  }
+
+  for (const folderTitle of settings.libraryIndexFolderTitles) {
+    const maxColumns = rowColumnsFor(settings, folderTitle.row)
+    if (folderTitle.column > maxColumns) {
+      issues.push(
+        `文件夹坐标 ${coordinateLabel(folderTitle.row, folderTitle.column)} 超过了该行 ${maxColumns} 列，前台会隐藏该文件夹入口。`,
+      )
+    }
+  }
+
+  const knownLibraries = (libraries.value ?? []).filter((library) =>
+    !assignedLibraries.has(library.metadata.name),
+  )
+  const occupiedRows = new Map<number, number>()
+  for (const key of visiblePlacementKeys) {
+    const row = Number(key.split(':')[0])
+    occupiedRows.set(row, (occupiedRows.get(row) || 0) + 1)
+  }
+
+  let row = 1
+  let remaining = knownLibraries.length
+  while (remaining > 0) {
+    const columns = rowColumnsFor(settings, row)
+    const occupied = occupiedRows.get(row) || 0
+    const freeSlots = Math.max(0, columns - occupied)
+    if (freeSlots > 0) {
+      const filled = Math.min(freeSlots, remaining)
+      occupiedRows.set(row, occupied + filled)
+      remaining -= filled
+    }
+    row += 1
+  }
+
+  const maxConfiguredRow = Math.max(
+    0,
+    ...settings.libraryIndexRowLayouts.map((item) => item.row || 0),
+    ...settings.libraryIndexPlacements.map((item) => item.row || 0),
+    ...settings.libraryIndexFolderTitles.map((item) => item.row || 0),
+    row - 1,
+  )
+
+  const blankRows: number[] = []
+  for (let rowIndex = 1; rowIndex <= maxConfiguredRow; rowIndex += 1) {
+    if ((occupiedRows.get(rowIndex) || 0) === 0) {
+      blankRows.push(rowIndex)
+    }
+  }
+  if (blankRows.length) {
+    issues.push(`当前设置会保留空白行：${blankRows.map((item) => `第 ${item} 行`).join('、')}。`)
+  }
+
+  return Array.from(new Set(issues))
+}
+
+async function persistSettings(normalized: MyDocsSettings) {
+  const finalSettings: MyDocsSettings = {
+    ...normalized,
+    defaultSort: normalized.defaultSort,
+    defaultLibraryName: normalized.defaultLibraryName ?? '',
+    libraryIndexDefaultColumns:
+      Number(normalized.libraryIndexDefaultColumns)
+      || defaultMyDocsSettings.libraryIndexDefaultColumns,
+    libraryIndexDefaultMaxRows:
+      Number(normalized.libraryIndexDefaultMaxRows)
+      || defaultMyDocsSettings.libraryIndexDefaultMaxRows,
+    libraryIndexPageLayouts: normalized.libraryIndexPageLayouts,
+    libraryIndexRowLayouts: normalized.libraryIndexRowLayouts,
+    libraryIndexPlacements: normalized.libraryIndexPlacements,
+    libraryIndexFolderTitles: normalized.libraryIndexFolderTitles,
+    renderContentTheme: normalized.renderContentTheme,
+    renderCodeTheme:
+      normalized.renderCodeTheme?.trim() || defaultMyDocsSettings.renderCodeTheme,
+    renderLineNumber: !!normalized.renderLineNumber,
+    renderAutoSpace: !!normalized.renderAutoSpace,
+    renderGfmAutoLink: !!normalized.renderGfmAutoLink,
+    renderFootnotes: !!normalized.renderFootnotes,
+    renderMark: !!normalized.renderMark,
+    renderFixTermTypo: !!normalized.renderFixTermTypo,
+    renderParagraphBeginningSpace: !!normalized.renderParagraphBeginningSpace,
+    renderCodeBlockPreview: !!normalized.renderCodeBlockPreview,
+    renderMathBlockPreview: !!normalized.renderMathBlockPreview,
+  }
+
+  settingsState.value = finalSettings
 
   const next: ConfigMap = configMap.value
     ? {
         ...configMap.value,
         data: {
           ...(configMap.value.data ?? {}),
-          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(normalized),
+          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(finalSettings),
         },
       }
     : {
@@ -92,7 +292,7 @@ async function handleSubmit(values: MyDocsSettings) {
           name: MY_DOCS_CONFIG_MAP_NAME,
         },
         data: {
-          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(normalized),
+          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(finalSettings),
         },
       }
 
@@ -109,6 +309,25 @@ async function handleSubmit(values: MyDocsSettings) {
 
   Toast.success('设置已保存')
   await queryClient.invalidateQueries({ queryKey: ['my-docs-settings-configmap'] })
+}
+
+async function handleSubmit() {
+  const normalized = parseMyDocsSettings(stringifyMyDocsSettings(settingsState.value))
+  const issues = buildLayoutWarnings(normalized)
+
+  if (issues.length) {
+    Dialog.warning({
+      title: '发现布局问题，是否强制保存？',
+      description: issues.join('\n'),
+      confirmType: 'danger',
+      onConfirm: async () => {
+        await persistSettings(normalized)
+      },
+    })
+    return
+  }
+
+  await persistSettings(normalized)
 }
 </script>
 
@@ -139,37 +358,214 @@ async function handleSubmit(values: MyDocsSettings) {
         name="my-docs-settings-form"
         :actions="false"
         @submit="handleSubmit"
-        >
+      >
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">基础设置</h3>
-          <FormKit
-            type="select"
-            name="defaultSort"
-            label="默认排序"
-            :value="formState.defaultSort"
-            :options="[
-              { label: '排序权重升序', value: 'priorityAsc' },
-              { label: '创建时间倒序', value: 'createdDesc' },
-              { label: '标题升序', value: 'titleAsc' },
-            ]"
-            validation="required"
-          />
-          <FormKit
-            type="number"
-            name="pageSize"
-            label="每页数量"
-            :value="formState.pageSize"
-            validation="required|min:5|max:100"
-          />
-          <FormKit
-            type="select"
-            name="defaultLibraryName"
-            label="默认文档库"
-            :value="formState.defaultLibraryName"
-            :options="libraryOptions"
-            searchable
-            clearable
-          />
+          <div class="doc-settings-grid doc-settings-grid--compact">
+            <FormKit
+              type="select"
+              name="defaultSort"
+              label="默认排序"
+              v-model="settingsState.defaultSort"
+              :options="[
+                { label: '排序权重升序', value: 'priorityAsc' },
+                { label: '创建时间倒序', value: 'createdDesc' },
+                { label: '标题升序', value: 'titleAsc' },
+              ]"
+              validation="required"
+            />
+            <FormKit
+              type="select"
+              name="defaultLibraryName"
+              label="默认文档库"
+              v-model="settingsState.defaultLibraryName"
+              :options="libraryOptions"
+            />
+          </div>
+        </div>
+
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">文档库首页布局</h3>
+          <p class="doc-settings-help">
+            每一行都会按照固定槽位宽度排布。默认每行 2 个；特定行可单独改列数，文档库也可指定到具体坐标。
+            如果多个文档库落在同一个坐标，会折叠成文件夹卡片。
+          </p>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="number"
+              name="libraryIndexDefaultColumns"
+              label="默认每行个数"
+              v-model="settingsState.libraryIndexDefaultColumns"
+              validation="required|min:1|max:12"
+            />
+            <FormKit
+              type="number"
+              name="libraryIndexDefaultMaxRows"
+              label="默认每页最大行数"
+              v-model="settingsState.libraryIndexDefaultMaxRows"
+              validation="required|min:1|max:24"
+            />
+          </div>
+
+          <div class="doc-settings-list-section">
+            <div class="doc-settings-list-head">
+              <h4>特定行列数</h4>
+              <VButton size="sm" type="secondary" @click="addRowLayout">新增行设置</VButton>
+            </div>
+            <p class="doc-settings-help">这里的行号是跨页面的全局行号，例如第 6 行可能落在第 2 页。</p>
+            <p
+              v-if="!settingsState.libraryIndexRowLayouts.length"
+              class="doc-settings-empty"
+            >
+              当前没有特定行列数设置，所有行都会使用默认每行个数。
+            </p>
+            <div
+              v-for="(item, index) in settingsState.libraryIndexRowLayouts"
+              :key="`row-layout-${index}`"
+              class="doc-settings-list-item"
+            >
+              <div class="doc-settings-list-grid doc-settings-list-grid--compact">
+                <label class="doc-settings-field">
+                  <span>第几行</span>
+                  <input v-model.number="item.row" min="1" type="number">
+                </label>
+                <label class="doc-settings-field">
+                  <span>该行列数</span>
+                  <input v-model.number="item.columns" min="1" max="24" type="number">
+                </label>
+              </div>
+              <div class="doc-settings-list-meta">
+                <span>{{ coordinateLabel(item.row, 1) }}</span>
+                <VButton size="sm" @click="removeRowLayout(index)">删除</VButton>
+              </div>
+            </div>
+          </div>
+
+          <div class="doc-settings-list-section">
+            <div class="doc-settings-list-head">
+              <h4>特定页设置</h4>
+              <VButton size="sm" type="secondary" @click="addPageLayout">新增页设置</VButton>
+            </div>
+            <p class="doc-settings-help">按页覆盖默认每页最大行数，例如第 2 页最多 1 行，第 3 页最多 4 行。</p>
+            <p
+              v-if="!settingsState.libraryIndexPageLayouts.length"
+              class="doc-settings-empty"
+            >
+              当前没有特定页设置，所有页面都会使用默认每页最大行数。
+            </p>
+            <div
+              v-for="(item, index) in settingsState.libraryIndexPageLayouts"
+              :key="`page-layout-${index}`"
+              class="doc-settings-list-item"
+            >
+              <div class="doc-settings-list-grid doc-settings-list-grid--compact">
+                <label class="doc-settings-field">
+                  <span>第几页</span>
+                  <input v-model.number="item.page" min="1" type="number">
+                </label>
+                <label class="doc-settings-field">
+                  <span>最大行数</span>
+                  <input v-model.number="item.maxRows" min="1" max="24" type="number">
+                </label>
+              </div>
+              <div class="doc-settings-list-meta">
+                <span>第 {{ item.page || '-' }} 页</span>
+                <VButton size="sm" @click="removePageLayout(index)">删除</VButton>
+              </div>
+            </div>
+          </div>
+
+          <div class="doc-settings-list-section">
+            <div class="doc-settings-list-head">
+              <h4>文档库坐标</h4>
+              <VButton size="sm" type="secondary" @click="addPlacement">新增文档库坐标</VButton>
+            </div>
+            <p class="doc-settings-help">
+              坐标按“第几行 / 第几列”填写。多个文档库可指定到同一个坐标，此时前台会渲染为文件夹卡片。
+            </p>
+            <p
+              v-if="!settingsState.libraryIndexPlacements.length"
+              class="doc-settings-empty"
+            >
+              当前没有手动坐标，未指定的文档库会按顺序自动填充。
+            </p>
+            <div
+              v-for="(item, index) in settingsState.libraryIndexPlacements"
+              :key="`placement-${index}`"
+              class="doc-settings-list-item"
+            >
+              <div class="doc-settings-list-grid">
+                <label class="doc-settings-field doc-settings-field--wide">
+                  <span>文档库</span>
+                  <select v-model="item.libraryName">
+                    <option
+                      v-for="option in placementLibraryOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
+                </label>
+                <label class="doc-settings-field">
+                  <span>第几行</span>
+                  <input v-model.number="item.row" min="1" type="number">
+                </label>
+                <label class="doc-settings-field">
+                  <span>第几列</span>
+                  <input v-model.number="item.column" min="1" type="number">
+                </label>
+              </div>
+              <div class="doc-settings-list-meta">
+                <span>{{ coordinateLabel(item.row, item.column) }}</span>
+                <VButton size="sm" @click="removePlacement(index)">删除</VButton>
+              </div>
+            </div>
+          </div>
+
+          <div class="doc-settings-list-section">
+            <div class="doc-settings-list-head">
+              <h4>文件夹名称</h4>
+              <VButton size="sm" type="secondary" @click="addFolderTitle">新增坐标标题</VButton>
+            </div>
+            <p class="doc-settings-help">
+              仅当某个坐标落入多个文档库时生效；未设置时，会使用该文件夹中排序最靠前的文档库名称。
+            </p>
+            <p
+              v-if="!settingsState.libraryIndexFolderTitles.length"
+              class="doc-settings-empty"
+            >
+              当前没有坐标标题。
+            </p>
+            <div
+              v-for="(item, index) in settingsState.libraryIndexFolderTitles"
+              :key="`folder-title-${index}`"
+              class="doc-settings-list-item"
+            >
+              <div class="doc-settings-list-grid">
+                <label class="doc-settings-field">
+                  <span>第几行</span>
+                  <input v-model.number="item.row" min="1" type="number">
+                </label>
+                <label class="doc-settings-field">
+                  <span>第几列</span>
+                  <input v-model.number="item.column" min="1" type="number">
+                </label>
+                <label class="doc-settings-field doc-settings-field--wide">
+                  <span>文件夹名称</span>
+                  <input v-model.trim="item.title" maxlength="100" type="text">
+                </label>
+                <label class="doc-settings-field doc-settings-field--wide">
+                  <span>文件夹描述</span>
+                  <input v-model.trim="item.description" maxlength="200" type="text">
+                </label>
+              </div>
+              <div class="doc-settings-list-meta">
+                <span>{{ coordinateLabel(item.row, item.column) }}</span>
+                <VButton size="sm" @click="removeFolderTitle(index)">删除</VButton>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="doc-settings-section">
@@ -182,7 +578,7 @@ async function handleSubmit(values: MyDocsSettings) {
               type="select"
               name="renderContentTheme"
               label="内容主题"
-              :value="formState.renderContentTheme"
+              v-model="settingsState.renderContentTheme"
               :options="[
                 { label: 'Light', value: 'light' },
                 { label: 'Dark', value: 'dark' },
@@ -195,7 +591,7 @@ async function handleSubmit(values: MyDocsSettings) {
               type="text"
               name="renderCodeTheme"
               label="代码主题"
-              :value="formState.renderCodeTheme"
+              v-model="settingsState.renderCodeTheme"
               help="填写 Vditor / Chroma 代码主题名，例如 github、monokai。"
               validation="required|length:1,100"
             />
@@ -205,55 +601,55 @@ async function handleSubmit(values: MyDocsSettings) {
               type="switch"
               name="renderLineNumber"
               label="代码行号"
-              :value="formState.renderLineNumber"
+              v-model="settingsState.renderLineNumber"
             />
             <FormKit
               type="switch"
               name="renderAutoSpace"
               label="自动空格"
-              :value="formState.renderAutoSpace"
+              v-model="settingsState.renderAutoSpace"
             />
             <FormKit
               type="switch"
               name="renderGfmAutoLink"
               label="自动链接"
-              :value="formState.renderGfmAutoLink"
+              v-model="settingsState.renderGfmAutoLink"
             />
             <FormKit
               type="switch"
               name="renderFootnotes"
               label="脚注"
-              :value="formState.renderFootnotes"
+              v-model="settingsState.renderFootnotes"
             />
             <FormKit
               type="switch"
               name="renderMark"
               label="Mark 标记"
-              :value="formState.renderMark"
+              v-model="settingsState.renderMark"
             />
             <FormKit
               type="switch"
               name="renderFixTermTypo"
               label="术语修正"
-              :value="formState.renderFixTermTypo"
+              v-model="settingsState.renderFixTermTypo"
             />
             <FormKit
               type="switch"
               name="renderParagraphBeginningSpace"
               label="段首空两格"
-              :value="formState.renderParagraphBeginningSpace"
+              v-model="settingsState.renderParagraphBeginningSpace"
             />
             <FormKit
               type="switch"
               name="renderCodeBlockPreview"
               label="代码块即时渲染"
-              :value="formState.renderCodeBlockPreview"
+              v-model="settingsState.renderCodeBlockPreview"
             />
             <FormKit
               type="switch"
               name="renderMathBlockPreview"
               label="公式块即时渲染"
-              :value="formState.renderMathBlockPreview"
+              v-model="settingsState.renderMathBlockPreview"
             />
           </div>
         </div>
@@ -293,5 +689,107 @@ async function handleSubmit(values: MyDocsSettings) {
   display: grid;
   gap: 0 16px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.doc-settings-grid--compact {
+  align-items: start;
+  justify-content: start;
+  grid-template-columns: repeat(2, minmax(0, 320px));
+}
+
+.doc-settings-grid--compact :deep(.formkit-outer) {
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .doc-settings-grid--compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.doc-settings-list-section + .doc-settings-list-section {
+  margin-top: 20px;
+}
+
+.doc-settings-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.doc-settings-list-head h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.doc-settings-list-item {
+  padding: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.doc-settings-list-item + .doc-settings-list-item {
+  margin-top: 12px;
+}
+
+.doc-settings-list-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.doc-settings-list-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 220px));
+}
+
+.doc-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.doc-settings-field--wide {
+  min-width: 0;
+}
+
+.doc-settings-field input,
+.doc-settings-field select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+}
+
+.doc-settings-list-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.doc-settings-empty {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px dashed #d1d5db;
+  border-radius: 10px;
+  color: #6b7280;
+  background: #f9fafb;
 }
 </style>

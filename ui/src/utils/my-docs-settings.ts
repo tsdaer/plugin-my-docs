@@ -4,10 +4,38 @@ export const MY_DOCS_CONFIG_GROUP = 'basic'
 export type DocSort = 'priorityAsc' | 'createdDesc' | 'titleAsc'
 export type DocContentTheme = 'light' | 'dark' | 'wechat' | 'ant-design'
 
+export interface LibraryPageLayoutSetting {
+  page: number
+  maxRows: number
+}
+
+export interface LibraryRowLayoutSetting {
+  row: number
+  columns: number
+}
+
+export interface LibraryPlacementSetting {
+  libraryName: string
+  row: number
+  column: number
+}
+
+export interface LibraryFolderTitleSetting {
+  row: number
+  column: number
+  title: string
+  description: string
+}
+
 export interface MyDocsSettings {
   defaultSort: DocSort
-  pageSize: number
   defaultLibraryName: string
+  libraryIndexDefaultColumns: number
+  libraryIndexDefaultMaxRows: number
+  libraryIndexPageLayouts: LibraryPageLayoutSetting[]
+  libraryIndexRowLayouts: LibraryRowLayoutSetting[]
+  libraryIndexPlacements: LibraryPlacementSetting[]
+  libraryIndexFolderTitles: LibraryFolderTitleSetting[]
   renderContentTheme: DocContentTheme
   renderCodeTheme: string
   renderLineNumber: boolean
@@ -23,8 +51,13 @@ export interface MyDocsSettings {
 
 export const defaultMyDocsSettings: MyDocsSettings = {
   defaultSort: 'priorityAsc',
-  pageSize: 20,
   defaultLibraryName: '',
+  libraryIndexDefaultColumns: 2,
+  libraryIndexDefaultMaxRows: 2,
+  libraryIndexPageLayouts: [],
+  libraryIndexRowLayouts: [],
+  libraryIndexPlacements: [],
+  libraryIndexFolderTitles: [],
   renderContentTheme: 'light',
   renderCodeTheme: 'github',
   renderLineNumber: false,
@@ -36,6 +69,16 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   renderParagraphBeginningSpace: false,
   renderCodeBlockPreview: true,
   renderMathBlockPreview: true,
+}
+
+function cloneDefaultSettings(): MyDocsSettings {
+  return {
+    ...defaultMyDocsSettings,
+    libraryIndexPageLayouts: [...defaultMyDocsSettings.libraryIndexPageLayouts],
+    libraryIndexRowLayouts: [...defaultMyDocsSettings.libraryIndexRowLayouts],
+    libraryIndexPlacements: [...defaultMyDocsSettings.libraryIndexPlacements],
+    libraryIndexFolderTitles: [...defaultMyDocsSettings.libraryIndexFolderTitles],
+  }
 }
 
 const contentThemes = new Set<DocContentTheme>(['light', 'dark', 'wechat', 'ant-design'])
@@ -54,9 +97,127 @@ function readNumber(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function normalizePositiveInt(value: unknown, fallback: number, max = 24): number {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return fallback
+  }
+  return Math.min(parsed, max)
+}
+
+function readPageLayouts(value: unknown): LibraryPageLayoutSetting[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<number>()
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return undefined
+      }
+      const page = normalizePositiveInt((item as Record<string, unknown>).page, 0, 999)
+      const maxRows = normalizePositiveInt((item as Record<string, unknown>).maxRows, 0, 24)
+      if (page < 1 || maxRows < 1) {
+        return undefined
+      }
+      if (seen.has(page)) {
+        return undefined
+      }
+      seen.add(page)
+      return { page, maxRows }
+    })
+    .filter((item): item is LibraryPageLayoutSetting => !!item)
+    .sort((a, b) => a.page - b.page)
+}
+
+function readRowLayouts(value: unknown): LibraryRowLayoutSetting[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<number>()
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return undefined
+      }
+      const row = normalizePositiveInt((item as Record<string, unknown>).row, 0, 999)
+      const columns = normalizePositiveInt((item as Record<string, unknown>).columns, 0, 24)
+      if (row < 1 || columns < 1) {
+        return undefined
+      }
+      if (seen.has(row)) {
+        return undefined
+      }
+      seen.add(row)
+      return { row, columns }
+    })
+    .filter((item): item is LibraryRowLayoutSetting => !!item)
+    .sort((a, b) => a.row - b.row)
+}
+
+function readPlacements(value: unknown): LibraryPlacementSetting[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return undefined
+      }
+      const record = item as Record<string, unknown>
+      const libraryName = readString(record.libraryName, '').trim()
+      const row = normalizePositiveInt(record.row, 0)
+      const column = normalizePositiveInt(record.column, 0, 24)
+      if (!libraryName || row < 1 || column < 1) {
+        return undefined
+      }
+      if (seen.has(libraryName)) {
+        return undefined
+      }
+      seen.add(libraryName)
+      return { libraryName, row, column }
+    })
+    .filter((item): item is LibraryPlacementSetting => !!item)
+    .sort((a, b) => a.row - b.row || a.column - b.column || a.libraryName.localeCompare(b.libraryName))
+}
+
+function readFolderTitles(value: unknown): LibraryFolderTitleSetting[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return undefined
+      }
+      const record = item as Record<string, unknown>
+      const row = normalizePositiveInt(record.row, 0)
+      const column = normalizePositiveInt(record.column, 0, 24)
+      const title = readString(record.title, '').trim()
+      const description = readString(record.description, '').trim()
+      if (row < 1 || column < 1 || !title) {
+        return undefined
+      }
+      const key = `${row}:${column}`
+      if (seen.has(key)) {
+        return undefined
+      }
+      seen.add(key)
+      return { row, column, title, description }
+    })
+    .filter((item): item is LibraryFolderTitleSetting => !!item)
+    .sort((a, b) => a.row - b.row || a.column - b.column)
+}
+
 export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
   if (!raw) {
-    return { ...defaultMyDocsSettings }
+    return cloneDefaultSettings()
   }
 
   try {
@@ -70,11 +231,24 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
 
     return {
       defaultSort,
-      pageSize: readNumber(parsed.pageSize, defaultMyDocsSettings.pageSize),
       defaultLibraryName: readString(
         parsed.defaultLibraryName,
         defaultMyDocsSettings.defaultLibraryName,
       ),
+      libraryIndexDefaultColumns: normalizePositiveInt(
+        parsed.libraryIndexDefaultColumns,
+        defaultMyDocsSettings.libraryIndexDefaultColumns,
+        12,
+      ),
+      libraryIndexDefaultMaxRows: normalizePositiveInt(
+        parsed.libraryIndexDefaultMaxRows,
+        defaultMyDocsSettings.libraryIndexDefaultMaxRows,
+        24,
+      ),
+      libraryIndexPageLayouts: readPageLayouts(parsed.libraryIndexPageLayouts),
+      libraryIndexRowLayouts: readRowLayouts(parsed.libraryIndexRowLayouts),
+      libraryIndexPlacements: readPlacements(parsed.libraryIndexPlacements),
+      libraryIndexFolderTitles: readFolderTitles(parsed.libraryIndexFolderTitles),
       renderContentTheme,
       renderCodeTheme: readString(parsed.renderCodeTheme, defaultMyDocsSettings.renderCodeTheme),
       renderLineNumber: readBoolean(
@@ -109,7 +283,7 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
       ),
     }
   } catch {
-    return { ...defaultMyDocsSettings }
+    return cloneDefaultSettings()
   }
 }
 

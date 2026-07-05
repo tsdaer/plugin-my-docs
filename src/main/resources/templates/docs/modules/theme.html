@@ -4,6 +4,7 @@
     (function () {
       var root = document.documentElement;
       var observedAttributes = ['class', 'data-color-scheme', 'data-theme', 'data-mode'];
+      var managedSchemeAttribute = 'data-mdocs-color-scheme';
 
       function normalizeScheme(value) {
         if (!value) {
@@ -27,7 +28,12 @@
           return null;
         }
 
-        var direct = normalizeScheme(element.getAttribute('data-color-scheme'))
+        var dataColorScheme = element.getAttribute('data-color-scheme');
+        if (element === root && dataColorScheme === root.getAttribute(managedSchemeAttribute)) {
+          dataColorScheme = null;
+        }
+
+        var direct = normalizeScheme(dataColorScheme)
           || normalizeScheme(element.getAttribute('data-theme'))
           || normalizeScheme(element.getAttribute('data-mode'));
         if (direct) {
@@ -61,10 +67,20 @@
       }
 
       function detectScheme() {
-        return detectFromElement(root) || detectFromElement(document.body) || 'auto';
+        return detectFromElement(document.body) || detectFromElement(root);
       }
 
       function applyScheme(nextScheme) {
+        var currentManagedScheme = root.getAttribute(managedSchemeAttribute);
+        if (!nextScheme) {
+          if (currentManagedScheme && root.getAttribute('data-color-scheme') === currentManagedScheme) {
+            root.removeAttribute('data-color-scheme');
+          }
+          root.removeAttribute(managedSchemeAttribute);
+          return;
+        }
+
+        root.setAttribute(managedSchemeAttribute, nextScheme);
         if (root.getAttribute('data-color-scheme') !== nextScheme) {
           root.setAttribute('data-color-scheme', nextScheme);
         }
@@ -151,27 +167,6 @@
     html.color-scheme-auto,
     html.theme-auto {
       color-scheme: light dark;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      html[data-color-scheme="auto"],
-      html.color-scheme-auto,
-      html.theme-auto {
-        --mdocs-bg: #020617;
-        --mdocs-surface: #0f172a;
-        --mdocs-surface-soft: #111827;
-        --mdocs-hero-bg: linear-gradient(135deg, #0f172a, #082f49);
-        --mdocs-text: #e5edf7;
-        --mdocs-text-strong: #f8fafc;
-        --mdocs-muted: #94a3b8;
-        --mdocs-border: #1e293b;
-        --mdocs-accent: #5eead4;
-        --mdocs-accent-soft: rgba(45, 212, 191, 0.14);
-        --mdocs-code-bg: #020617;
-        --mdocs-code-text: #dbeafe;
-        --mdocs-inline-code-bg: #172036;
-        --mdocs-shadow: 0 18px 40px rgba(2, 6, 23, 0.45);
-      }
     }
   </style>
 </th:block>

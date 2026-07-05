@@ -18,15 +18,20 @@ spec:
               value: createdDesc
             - label: 标题升序
               value: titleAsc
-        - $formkit: number
-          name: pageSize
-          label: 每页数量
-          value: 20
-          validation: required|min:5|max:100
         - $formkit: text
           name: defaultLibraryName
           label: 默认文档库
           value: ""
+        - $formkit: number
+          name: libraryIndexDefaultColumns
+          label: 文档库首页默认每行个数
+          value: 2
+          validation: required|min:1|max:12
+        - $formkit: number
+          name: libraryIndexDefaultMaxRows
+          label: 文档库首页默认每页最大行数
+          value: 2
+          validation: required|min:1|max:24
         - $formkit: select
           name: renderContentTheme
           label: 内容主题

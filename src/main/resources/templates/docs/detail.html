@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh" data-color-scheme="auto" xmlns:th="https://www.thymeleaf.org">
+<html lang="zh" xmlns:th="https://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,13 +11,27 @@
   <meta property="og:image" th:if="${!#strings.isEmpty(seo.image)}" th:content="${seo.image}">
   <th:block th:replace="~{plugin:my-docs:docs/modules/theme :: theme}"></th:block>
   <style>
+    html { scroll-behavior: smooth; }
     body { margin: 0; color: var(--mdocs-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--mdocs-bg); transition: background-color .2s ease, color .2s ease; }
     .mdocs-layout { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 32px; max-width: 1180px; margin: 0 auto; padding: 36px 20px 72px; }
+    .mdocs-layout--with-outline { grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(190px, 240px); max-width: 1420px; }
     .mdocs-sidebar { border-right: 1px solid var(--mdocs-border); padding-right: 20px; }
+    .mdocs-sidebar, .mdocs-outline { position: sticky; top: 24px; align-self: start; }
+    .mdocs-article { min-width: 0; }
     .mdocs-back { color: var(--mdocs-accent); text-decoration: none; font-size: 14px; }
     .mdocs-eyebrow { margin: 0 0 10px; color: var(--mdocs-muted); font-size: 14px; }
     .mdocs-title { margin: 0 0 24px; font-size: 36px; line-height: 1.2; color: var(--mdocs-text-strong); }
+    .mdocs-outline-drawer { display: none; margin: 0 0 24px; border: 1px solid var(--mdocs-border); border-radius: 12px; background: var(--mdocs-surface); box-shadow: var(--mdocs-shadow); overflow: hidden; }
+    .mdocs-outline-drawer summary { cursor: pointer; padding: 14px 16px; color: var(--mdocs-text-strong); font-weight: 600; }
+    .mdocs-outline-drawer[open] summary { border-bottom: 1px solid var(--mdocs-border); }
+    .mdocs-outline-panel { padding: 12px 0; }
+    .mdocs-outline-title { margin: 0 0 14px; color: var(--mdocs-text-strong); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .mdocs-outline-list { list-style: none; margin: 0; padding: 0; }
+    .mdocs-outline-item + .mdocs-outline-item { margin-top: 2px; }
+    .mdocs-outline-link { display: block; padding: 7px 10px 7px calc(10px + var(--mdocs-outline-depth, 0) * 14px); color: var(--mdocs-muted); text-decoration: none; border-radius: 8px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
+    .mdocs-outline-link:hover, .mdocs-outline-link.is-active { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
     .mdocs-content { line-height: 1.8; font-size: 16px; }
+    .mdocs-content :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 88px; }
     .mdocs-content h2 { margin-top: 34px; border-bottom: 1px solid var(--mdocs-border); padding-bottom: 8px; color: var(--mdocs-text-strong); }
     .mdocs-content h3 { margin-top: 28px; }
     .mdocs-content a { color: var(--mdocs-accent); }
@@ -28,20 +42,118 @@
     .mdocs-content table { width: 100%; border-collapse: collapse; }
     .mdocs-content th, .mdocs-content td { border: 1px solid var(--mdocs-border); padding: 8px 10px; }
     .mdocs-content blockquote { margin: 20px 0; padding-left: 16px; border-left: 3px solid var(--mdocs-border); color: var(--mdocs-muted); }
-    @media (max-width: 760px) { .mdocs-layout { display: block; } .mdocs-sidebar { border-right: 0; border-bottom: 1px solid var(--mdocs-border); padding: 0 0 20px; margin-bottom: 24px; } }
+    .mdocs-content :target { animation: mdocs-target-flash 1.6s ease; }
+    @keyframes mdocs-target-flash {
+      0% { background: transparent; }
+      18% { background: var(--mdocs-accent-soft); }
+      100% { background: transparent; }
+    }
+    @media (max-width: 980px) {
+      .mdocs-layout, .mdocs-layout--with-outline { grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); max-width: 1180px; }
+      .mdocs-outline { display: none; }
+      .mdocs-outline-drawer { display: block; }
+    }
+    @media (max-width: 760px) {
+      .mdocs-layout, .mdocs-layout--with-outline { display: block; }
+      .mdocs-sidebar { position: static; border-right: 0; border-bottom: 1px solid var(--mdocs-border); padding: 0 0 20px; margin-bottom: 24px; }
+      .mdocs-title { font-size: 30px; }
+    }
   </style>
 </head>
 <body>
-  <main class="mdocs-layout">
+  <main class="mdocs-layout" th:classappend="${!#lists.isEmpty(detailContent.outline)} ? ' mdocs-layout--with-outline'">
     <aside class="mdocs-sidebar">
       <a class="mdocs-back" th:href="@{/docs/{librarySlug}(librarySlug=${library.spec.slug})}" th:text="${library.spec.title}">文档库</a>
       <div th:replace="~{plugin:my-docs:docs/modules/tree :: tree(nodes=${tree}, library=${library}, currentDoc=${doc})}"></div>
     </aside>
-    <article>
+    <article class="mdocs-article">
       <p class="mdocs-eyebrow" th:text="${library.spec.title}">文档库</p>
       <h1 class="mdocs-title" th:text="${doc.spec.title}">文档标题</h1>
-      <div class="mdocs-content" th:utext="${doc.spec.content}"></div>
+      <details class="mdocs-outline-drawer" th:if="${!#lists.isEmpty(detailContent.outline)}">
+        <summary>本页目录</summary>
+        <div class="mdocs-outline-panel"
+             th:replace="~{plugin:my-docs:docs/modules/outline :: outline(items=${detailContent.outline})}"></div>
+      </details>
+      <div class="mdocs-content" th:utext="${detailContent.html}"></div>
     </article>
+    <aside class="mdocs-outline" th:if="${!#lists.isEmpty(detailContent.outline)}">
+      <p class="mdocs-outline-title">本页目录</p>
+      <div th:replace="~{plugin:my-docs:docs/modules/outline :: outline(items=${detailContent.outline})}"></div>
+    </aside>
   </main>
+  <script th:if="${!#lists.isEmpty(detailContent.outline)}">
+    (function () {
+      var links = Array.prototype.slice.call(document.querySelectorAll('.mdocs-outline-link[data-target]'));
+      if (!links.length) {
+        return;
+      }
+
+      var headings = links
+        .map(function (link) {
+          return document.getElementById(link.getAttribute('data-target'));
+        })
+        .filter(function (heading) {
+          return !!heading;
+        });
+
+      if (!headings.length) {
+        return;
+      }
+
+      var activeId = '';
+      var ticking = false;
+
+      function setActive(id) {
+        if (!id || id === activeId) {
+          return;
+        }
+        activeId = id;
+        links.forEach(function (link) {
+          link.classList.toggle('is-active', link.getAttribute('data-target') === id);
+        });
+      }
+
+      function resolveActiveId() {
+        var threshold = 140;
+        var current = headings[0].id;
+        headings.forEach(function (heading) {
+          if (heading.getBoundingClientRect().top - threshold <= 0) {
+            current = heading.id;
+          }
+        });
+        return current;
+      }
+
+      function syncActive() {
+        ticking = false;
+        setActive(resolveActiveId());
+      }
+
+      function requestSync() {
+        if (ticking) {
+          return;
+        }
+        ticking = true;
+        window.requestAnimationFrame(syncActive);
+      }
+
+      links.forEach(function (link) {
+        link.addEventListener('click', function () {
+          var details = link.closest('details');
+          if (details) {
+            details.removeAttribute('open');
+          }
+          requestSync();
+        });
+      });
+
+      window.addEventListener('scroll', requestSync, { passive: true });
+      window.addEventListener('resize', requestSync);
+      window.addEventListener('hashchange', requestSync);
+
+      requestSync();
+      window.setTimeout(requestSync, 80);
+    })();
+  </script>
 </body>
 </html>
