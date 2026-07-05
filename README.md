@@ -4,7 +4,7 @@
 
 `my-docs` 在 Halo 原有文章与页面模型之外，补充一套独立的文档系统，用来承载产品手册、开发文档、帮助中心这类需要树形目录和连续阅读体验的内容。
 
-项目开发路线见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)，发布前检查项见 [docs/release-checklist.md](./docs/release-checklist.md)。
+项目开发路线见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)，发布前检查项见 [docs/release-checklist.md](./docs/release-checklist.md)，发行说明模板见 [docs/release-notes-template.md](./docs/release-notes-template.md)，截图执行说明见 [docs/screenshot-guide.md](./docs/screenshot-guide.md)。
 
 ## 当前能力
 
@@ -22,9 +22,23 @@
 
 当前主线里程碑 M0-M4 已完成，M5 正在推进，主要剩余项是：
 
-- 完善发布文档与界面截图
 - 等待 CI 在远端跑通并沉淀发布流程
 - 可选能力：评论系统集成
+
+## 安装与升级
+
+安装方式：
+
+1. 从 GitHub Release 下载插件 jar。
+2. 在 Halo Console 的「插件」页面上传 jar。
+3. 安装并启用 `my-docs`。
+
+升级前建议先备份 Halo 数据，并在升级后检查：
+
+- 文档库列表与文档树是否正常加载
+- 文档编辑保存后前台是否能正常渲染
+- `/docs`、`/docs/{librarySlug}`、`/docs/{librarySlug}/{docSlug}` 是否可访问
+- 搜索是否能命中文档内容
 
 ## 环境要求
 
@@ -76,6 +90,47 @@ cd ..
 build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
 ```
 
+## 发布资料
+
+- 发布检查清单：[docs/release-checklist.md](./docs/release-checklist.md)
+- Release 说明模板：[docs/release-notes-template.md](./docs/release-notes-template.md)
+- 截图指南：[docs/screenshot-guide.md](./docs/screenshot-guide.md)
+- 截图目录：[docs/screenshots/README.md](./docs/screenshots/README.md)
+
+## 界面预览
+
+### Console 管理端
+
+文档库列表：
+
+![文档库列表](./docs/screenshots/console-libraries.webp)
+
+文档树管理：
+
+![文档树管理](./docs/screenshots/console-tree.webp)
+
+文档编辑页：
+
+![文档编辑页](./docs/screenshots/console-editor.webp)
+
+文档设置页：
+
+![文档设置页](./docs/screenshots/console-settings.webp)
+
+仪表盘统计组件：
+
+![仪表盘统计组件](./docs/screenshots/dashboard-widget.webp)
+
+### 前台文档站点
+
+文档库首页：
+
+![文档库首页](./docs/screenshots/site-index.webp)
+
+文档详情页：
+
+![文档详情页](./docs/screenshots/site-detail.webp)
+
 ## 功能概览
 
 ### Console 管理端
@@ -116,7 +171,7 @@ plugin-my-docs/
 ├── src/test/java/com/github/mydocs/      # 后端测试
 ├── ui/src/                               # Console 前端代码
 ├── PROJECT_PLAN.md                       # 里程碑与设计计划
-└── docs/release-checklist.md             # 发布检查与截图清单
+└── docs/                                 # 发布检查、截图与发行说明资料
 ```
 
 ## 许可证

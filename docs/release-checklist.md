@@ -2,6 +2,12 @@
 
 本清单用于推进 `PROJECT_PLAN.md` 中的 M5 发布阶段，覆盖本地校验、截图整理与发布动作。
 
+配套资料：
+
+- 发行说明模板：[release-notes-template.md](./release-notes-template.md)
+- 截图执行说明：[screenshot-guide.md](./screenshot-guide.md)
+- 截图目录：[screenshots/README.md](./screenshots/README.md)
+
 ## 1. 本地校验
 
 发布前至少执行一次：
@@ -41,6 +47,16 @@
 - 仪表盘文档统计组件
 - 前台文档库首页
 - 前台文档详情页（展示侧边目录树）
+
+当前仓库内已落库主图：
+
+- `docs/screenshots/console-libraries.webp`
+- `docs/screenshots/console-tree.webp`
+- `docs/screenshots/console-editor.webp`
+- `docs/screenshots/console-settings.webp`
+- `docs/screenshots/dashboard-widget.webp`
+- `docs/screenshots/site-index.webp`
+- `docs/screenshots/site-detail.webp`
 
 建议统一使用：
 
