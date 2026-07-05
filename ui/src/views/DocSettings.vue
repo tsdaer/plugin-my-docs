@@ -6,7 +6,16 @@ import { computed, ref, watch } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
-import { DocLibraryV1alpha1Api } from '@/api/generated'
+import { DocLibraryV1alpha1Api, DocV1alpha1Api } from '@/api/generated'
+import type { Doc, DocLibrary } from '@/api/generated'
+import {
+  buildMyDocsBackup,
+  buildMyDocsBackupFilename,
+  parseMyDocsBackup,
+  type DocBackupRecord,
+  type DocLibraryBackupRecord,
+  type MyDocsBackupFile,
+} from '@/utils/my-docs-backup'
 import {
   MY_DOCS_CONFIG_GROUP,
   MY_DOCS_CONFIG_MAP_NAME,
@@ -20,9 +29,13 @@ import {
   type MyDocsSettings,
 } from '@/utils/my-docs-settings'
 
+const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
+const LIST_PAGE_SIZE = 200
+
 const router = useRouter()
 const queryClient = useQueryClient()
 const libraryApi = new DocLibraryV1alpha1Api(undefined, '', axiosInstance)
+const docApi = new DocV1alpha1Api(undefined, '', axiosInstance)
 
 const { data: configMap, isLoading: isConfigLoading } = useQuery({
   queryKey: ['my-docs-settings-configmap'],
@@ -50,6 +63,9 @@ const { data: libraries, isLoading: isLibrariesLoading } = useQuery({
 
 const formKey = computed(() => configMap.value?.metadata.version ?? 'new')
 const isLoading = computed(() => isConfigLoading.value || isLibrariesLoading.value)
+const isExporting = ref(false)
+const isImporting = ref(false)
+const importInput = ref<HTMLInputElement | null>(null)
 
 const settingsState = ref<MyDocsSettings>(parseMyDocsSettings())
 
@@ -311,6 +327,265 @@ async function persistSettings(normalized: MyDocsSettings) {
   await queryClient.invalidateQueries({ queryKey: ['my-docs-settings-configmap'] })
 }
 
+function buildExtensionConfigMap(rawSettings: string): ConfigMap {
+  return configMap.value
+    ? {
+        ...configMap.value,
+        data: {
+          ...(configMap.value.data ?? {}),
+          [MY_DOCS_CONFIG_GROUP]: rawSettings,
+        },
+      }
+    : {
+        apiVersion: 'v1alpha1',
+        kind: 'ConfigMap',
+        metadata: {
+          name: MY_DOCS_CONFIG_MAP_NAME,
+        },
+        data: {
+          [MY_DOCS_CONFIG_GROUP]: rawSettings,
+        },
+      }
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  return fallback
+}
+
+async function listAllLibraries(): Promise<DocLibrary[]> {
+  const items: DocLibrary[] = []
+  let currentPage = 1
+  let total = 0
+
+  do {
+    const { data } = await libraryApi.listDocLibrary({
+      page: currentPage,
+      size: LIST_PAGE_SIZE,
+      sort: ['spec.priority,asc', 'metadata.creationTimestamp,desc'],
+    })
+    items.push(...(data.items ?? []))
+    total = data.total ?? items.length
+    currentPage += 1
+  } while (items.length < total)
+
+  return items
+}
+
+async function listAllDocs(): Promise<Doc[]> {
+  const items: Doc[] = []
+  let currentPage = 1
+  let total = 0
+
+  do {
+    const { data } = await docApi.listDoc({
+      page: currentPage,
+      size: LIST_PAGE_SIZE,
+      sort: ['spec.libraryName,asc', 'spec.priority,asc', 'metadata.creationTimestamp,desc'],
+    })
+    items.push(...(data.items ?? []))
+    total = data.total ?? items.length
+    currentPage += 1
+  } while (items.length < total)
+
+  return items
+}
+
+function downloadBackup(backup: MyDocsBackupFile) {
+  const text = JSON.stringify(backup, null, 2)
+  const blob = new Blob([text], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = buildMyDocsBackupFilename(backup.exportedAt)
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+function toLibraryPayload(record: DocLibraryBackupRecord, current?: DocLibrary): DocLibrary {
+  if (current) {
+    return {
+      ...current,
+      spec: {
+        ...current.spec,
+        ...record.spec,
+      },
+    }
+  }
+
+  return {
+    apiVersion: 'docs.halo.run/v1alpha1',
+    kind: 'DocLibrary',
+    metadata: {
+      name: record.name,
+    },
+    spec: {
+      ...record.spec,
+    },
+  }
+}
+
+function toDocPayload(record: DocBackupRecord, current?: Doc): Doc {
+  if (current) {
+    return {
+      ...current,
+      spec: {
+        ...current.spec,
+        ...record.spec,
+        parent: record.spec.parent || undefined,
+        publishTime: record.spec.publishTime || undefined,
+      },
+    }
+  }
+
+  return {
+    apiVersion: 'docs.halo.run/v1alpha1',
+    kind: 'Doc',
+    metadata: {
+      name: record.name,
+    },
+    spec: {
+      ...record.spec,
+      parent: record.spec.parent || undefined,
+      publishTime: record.spec.publishTime || undefined,
+    },
+  }
+}
+
+async function handleExport() {
+  isExporting.value = true
+  try {
+    const [allLibraries, allDocs] = await Promise.all([listAllLibraries(), listAllDocs()])
+    const backup = buildMyDocsBackup(
+      parseMyDocsSettings(configMap.value?.data?.[MY_DOCS_CONFIG_GROUP]),
+      allLibraries,
+      allDocs,
+    )
+    downloadBackup(backup)
+    Toast.success(`已导出 ${backup.libraries.length} 个文档库和 ${backup.docs.length} 篇文档`)
+  } catch (error) {
+    Toast.warning(getErrorMessage(error, '导出失败'))
+  } finally {
+    isExporting.value = false
+  }
+}
+
+function handleOpenImport() {
+  if (isImporting.value) {
+    return
+  }
+  importInput.value?.click()
+}
+
+async function restoreBackup(backup: MyDocsBackupFile) {
+  const normalizedSettings = parseMyDocsSettings(JSON.stringify(backup.settings))
+  const [currentLibraries, currentDocs] = await Promise.all([listAllLibraries(), listAllDocs()])
+  const currentLibraryMap = new Map(currentLibraries.map((library) => [library.metadata.name, library]))
+  const currentDocMap = new Map(currentDocs.map((doc) => [doc.metadata.name, doc]))
+  const backupLibraryNames = new Set(backup.libraries.map((library) => library.name))
+  const backupDocNames = new Set(backup.docs.map((doc) => doc.name))
+
+  for (const doc of currentDocs) {
+    if (!backupDocNames.has(doc.metadata.name)) {
+      await docApi.deleteDoc({ name: doc.metadata.name })
+    }
+  }
+
+  for (const library of backup.libraries) {
+    const current = currentLibraryMap.get(library.name)
+    const payload = toLibraryPayload(library, current)
+    if (current) {
+      await libraryApi.updateDocLibrary({
+        name: library.name,
+        docLibrary: payload,
+      })
+    } else {
+      await libraryApi.createDocLibrary({
+        docLibrary: payload,
+      })
+    }
+  }
+
+  for (const doc of backup.docs) {
+    const current = currentDocMap.get(doc.name)
+    const payload = toDocPayload(doc, current)
+    if (current) {
+      await axiosInstance.put<Doc>(`${DOC_ENDPOINT}/${doc.name}`, payload)
+    } else {
+      await axiosInstance.post<Doc>(DOC_ENDPOINT, payload)
+    }
+  }
+
+  for (const library of currentLibraries) {
+    if (!backupLibraryNames.has(library.metadata.name)) {
+      await libraryApi.deleteDocLibrary({ name: library.metadata.name })
+    }
+  }
+
+  const rawSettings = stringifyMyDocsSettings(normalizedSettings)
+  const next = buildExtensionConfigMap(rawSettings)
+
+  if (configMap.value) {
+    await coreApiClient.configMap.updateConfigMap({
+      name: MY_DOCS_CONFIG_MAP_NAME,
+      configMap: next,
+    })
+  } else {
+    await coreApiClient.configMap.createConfigMap({
+      configMap: next,
+    })
+  }
+
+  settingsState.value = normalizedSettings
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['my-docs-settings-configmap'] }),
+    queryClient.invalidateQueries({ queryKey: ['doc-libraries'] }),
+    queryClient.invalidateQueries({ queryKey: ['doc-libraries-for-settings'] }),
+    queryClient.invalidateQueries({ queryKey: ['docs'] }),
+  ])
+}
+
+async function handleImportFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+
+  if (!file) {
+    return
+  }
+
+  try {
+    const backup = parseMyDocsBackup(await file.text())
+    Dialog.warning({
+      title: '确定要加载设置并恢复文档内容吗？',
+      description: [
+        `文件包含 ${backup.libraries.length} 个文档库、${backup.docs.length} 篇文档。`,
+        '导入会覆盖当前文档设置。',
+        '同名文档库与文档会被更新，备份文件中不存在的文档会被删除。',
+        '这个过程不会自动回滚，请确认这是你要恢复的快照。',
+      ].join('\n'),
+      confirmType: 'danger',
+      onConfirm: async () => {
+        isImporting.value = true
+        try {
+          await restoreBackup(backup)
+          Toast.success('设置和文档内容已恢复')
+        } catch (error) {
+          Toast.warning(getErrorMessage(error, '加载设置失败'))
+        } finally {
+          isImporting.value = false
+        }
+      },
+    })
+  } catch (error) {
+    Toast.warning(getErrorMessage(error, '加载设置失败'))
+  }
+}
+
 async function handleSubmit() {
   const normalized = parseMyDocsSettings(stringifyMyDocsSettings(settingsState.value))
   const issues = buildLayoutWarnings(normalized)
@@ -359,6 +634,28 @@ async function handleSubmit() {
         :actions="false"
         @submit="handleSubmit"
       >
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">备份与恢复</h3>
+          <p class="doc-settings-help">
+            导出文件会包含当前设置、全部文档库以及文档 Markdown 内容。加载时会按快照覆盖并恢复这些数据。
+          </p>
+          <VSpace>
+            <VButton type="secondary" :loading="isExporting" @click="handleExport">
+              导出设置
+            </VButton>
+            <VButton :loading="isImporting" @click="handleOpenImport">
+              加载设置
+            </VButton>
+          </VSpace>
+          <input
+            ref="importInput"
+            accept=".json,application/json"
+            class="hidden"
+            type="file"
+            @change="handleImportFileChange"
+          >
+        </div>
+
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">基础设置</h3>
           <div class="doc-settings-grid doc-settings-grid--compact">
@@ -655,7 +952,7 @@ async function handleSubmit() {
         </div>
 
         <VSpace>
-          <VButton type="secondary" @click="$formkit.submit('my-docs-settings-form')">
+          <VButton type="secondary" :loading="isImporting" @click="$formkit.submit('my-docs-settings-form')">
             保存设置
           </VButton>
           <VButton @click="router.push({ name: 'DocLibraries' })">取消</VButton>

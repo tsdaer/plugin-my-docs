@@ -7,7 +7,6 @@ import {
   VEntityField,
   VEmpty,
   VLoading,
-  VSpace,
   VPagination,
   VStatusDot,
   VDropdownItem,
@@ -22,6 +21,7 @@ import { useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiBook2Line from '~icons/ri/book-2-line'
+import RiImageLine from '~icons/ri/image-line'
 import { DocLibraryV1alpha1Api } from '@/api/generated'
 import type { DocLibrary } from '@/api/generated'
 import DocLibraryEditingModal from '@/components/DocLibraryEditingModal.vue'
@@ -125,37 +125,41 @@ function handleDelete(library: DocLibrary) {
           <VEntity>
             <template #start>
               <button
-                class="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-gray-50"
+                class="doc-library-row"
                 type="button"
                 @click="handleManageDocs(library)"
               >
-                <div
-                  v-if="library.spec.cover"
-                  class="h-12 w-16 overflow-hidden rounded-md border border-gray-200 bg-gray-50"
-                >
+                <div class="doc-library-cover">
                   <img
+                    v-if="library.spec.cover"
                     :src="library.spec.cover"
                     :alt="library.spec.title"
-                    class="h-full w-full object-cover"
+                    class="doc-library-cover-image"
                   >
+                  <div v-else class="doc-library-cover-placeholder">
+                    <RiImageLine class="text-lg" />
+                  </div>
                 </div>
-                <VEntityField
-                  :title="library.spec.title"
-                  :description="library.spec.slug"
-                />
+                <div class="doc-library-main">
+                  <p class="doc-library-title">{{ library.spec.title }}</p>
+                  <p class="doc-library-slug">{{ library.spec.slug }}</p>
+                </div>
               </button>
             </template>
             <template #end>
-              <VEntityField v-if="library.spec.description">
+              <VEntityField>
                 <template #description>
-                  <span class="text-xs text-gray-500 line-clamp-1">
-                    {{ library.spec.description }}
+                  <span class="doc-library-description">
+                    {{ library.spec.description || '暂无描述' }}
                   </span>
                 </template>
               </VEntityField>
               <VEntityField>
                 <template #description>
-                  <VStatusDot v-tooltip="`排序：${library.spec.priority ?? 0}`" state="default" />
+                  <span class="doc-library-badge">
+                    <VStatusDot v-tooltip="`排序：${library.spec.priority ?? 0}`" state="default" />
+                    排序 {{ library.spec.priority ?? 0 }}
+                  </span>
                 </template>
               </VEntityField>
               <VEntityField v-if="library.metadata.creationTimestamp">
@@ -195,3 +199,98 @@ function handleDelete(library: DocLibrary) {
     @close="handleCloseModal"
   />
 </template>
+
+<style scoped>
+.doc-library-row {
+  display: flex;
+  width: 100%;
+  min-height: 84px;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.doc-library-row:hover {
+  background: #f8fafc;
+}
+
+.doc-library-cover {
+  display: flex;
+  height: 64px;
+  width: 96px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(14, 116, 144, 0.12), rgba(15, 118, 110, 0.04)),
+    #f8fafc;
+}
+
+.doc-library-cover-image {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+}
+
+.doc-library-cover-placeholder {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+
+.doc-library-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.doc-library-title {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.doc-library-slug {
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-library-description {
+  display: inline-block;
+  max-width: 220px;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-library-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+}
+</style>
