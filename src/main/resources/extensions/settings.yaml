@@ -27,3 +27,56 @@ spec:
           name: defaultLibraryName
           label: 默认文档库
           value: ""
+        - $formkit: select
+          name: renderContentTheme
+          label: 内容主题
+          value: light
+          options:
+            - label: Light
+              value: light
+            - label: Dark
+              value: dark
+            - label: WeChat
+              value: wechat
+            - label: Ant Design
+              value: ant-design
+        - $formkit: text
+          name: renderCodeTheme
+          label: 代码主题
+          value: github
+        - $formkit: switch
+          name: renderLineNumber
+          label: 代码行号
+          value: false
+        - $formkit: switch
+          name: renderAutoSpace
+          label: 自动空格
+          value: false
+        - $formkit: switch
+          name: renderGfmAutoLink
+          label: 自动链接
+          value: true
+        - $formkit: switch
+          name: renderFootnotes
+          label: 脚注
+          value: true
+        - $formkit: switch
+          name: renderMark
+          label: Mark 标记
+          value: false
+        - $formkit: switch
+          name: renderFixTermTypo
+          label: 术语修正
+          value: false
+        - $formkit: switch
+          name: renderParagraphBeginningSpace
+          label: 段首空两格
+          value: false
+        - $formkit: switch
+          name: renderCodeBlockPreview
+          label: 代码块即时渲染
+          value: true
+        - $formkit: switch
+          name: renderMathBlockPreview
+          label: 公式块即时渲染
+          value: true

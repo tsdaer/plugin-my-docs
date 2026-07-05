@@ -7,21 +7,14 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
 import { DocLibraryV1alpha1Api } from '@/api/generated'
-
-const CONFIG_MAP_NAME = 'my-docs-configmap'
-const CONFIG_GROUP = 'basic'
-
-interface SettingsForm {
-  defaultSort: 'priorityAsc' | 'createdDesc' | 'titleAsc'
-  pageSize: number
-  defaultLibraryName: string
-}
-
-const defaultSettings: SettingsForm = {
-  defaultSort: 'priorityAsc',
-  pageSize: 20,
-  defaultLibraryName: '',
-}
+import {
+  MY_DOCS_CONFIG_GROUP,
+  MY_DOCS_CONFIG_MAP_NAME,
+  defaultMyDocsSettings,
+  parseMyDocsSettings,
+  stringifyMyDocsSettings,
+  type MyDocsSettings,
+} from '@/utils/my-docs-settings'
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -33,7 +26,7 @@ const { data: configMap, isLoading: isConfigLoading } = useQuery({
     const { data } = await coreApiClient.configMap.listConfigMap({
       page: 1,
       size: 1,
-      fieldSelector: [`metadata.name=${CONFIG_MAP_NAME}`],
+      fieldSelector: [`metadata.name=${MY_DOCS_CONFIG_MAP_NAME}`],
     })
     return data.items[0]
   },
@@ -54,23 +47,9 @@ const { data: libraries, isLoading: isLibrariesLoading } = useQuery({
 const formKey = computed(() => configMap.value?.metadata.version ?? 'new')
 const isLoading = computed(() => isConfigLoading.value || isLibrariesLoading.value)
 
-const formState = computed<SettingsForm>(() => {
-  const raw = configMap.value?.data?.[CONFIG_GROUP]
-  if (!raw) {
-    return defaultSettings
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<SettingsForm>
-    return {
-      defaultSort: parsed.defaultSort ?? defaultSettings.defaultSort,
-      pageSize: Number(parsed.pageSize) || defaultSettings.pageSize,
-      defaultLibraryName: parsed.defaultLibraryName ?? defaultSettings.defaultLibraryName,
-    }
-  } catch {
-    return defaultSettings
-  }
-})
+const formState = computed<MyDocsSettings>(() =>
+  parseMyDocsSettings(configMap.value?.data?.[MY_DOCS_CONFIG_GROUP]),
+)
 
 const libraryOptions = computed(() => [
   { label: '不指定', value: '' },
@@ -80,11 +59,22 @@ const libraryOptions = computed(() => [
   })),
 ])
 
-async function handleSubmit(values: SettingsForm) {
-  const normalized: SettingsForm = {
+async function handleSubmit(values: MyDocsSettings) {
+  const normalized: MyDocsSettings = {
     defaultSort: values.defaultSort,
-    pageSize: Number(values.pageSize) || defaultSettings.pageSize,
+    pageSize: Number(values.pageSize) || defaultMyDocsSettings.pageSize,
     defaultLibraryName: values.defaultLibraryName ?? '',
+    renderContentTheme: values.renderContentTheme,
+    renderCodeTheme: values.renderCodeTheme?.trim() || defaultMyDocsSettings.renderCodeTheme,
+    renderLineNumber: !!values.renderLineNumber,
+    renderAutoSpace: !!values.renderAutoSpace,
+    renderGfmAutoLink: !!values.renderGfmAutoLink,
+    renderFootnotes: !!values.renderFootnotes,
+    renderMark: !!values.renderMark,
+    renderFixTermTypo: !!values.renderFixTermTypo,
+    renderParagraphBeginningSpace: !!values.renderParagraphBeginningSpace,
+    renderCodeBlockPreview: !!values.renderCodeBlockPreview,
+    renderMathBlockPreview: !!values.renderMathBlockPreview,
   }
 
   const next: ConfigMap = configMap.value
@@ -92,23 +82,23 @@ async function handleSubmit(values: SettingsForm) {
         ...configMap.value,
         data: {
           ...(configMap.value.data ?? {}),
-          [CONFIG_GROUP]: JSON.stringify(normalized),
+          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(normalized),
         },
       }
     : {
         apiVersion: 'v1alpha1',
         kind: 'ConfigMap',
         metadata: {
-          name: CONFIG_MAP_NAME,
+          name: MY_DOCS_CONFIG_MAP_NAME,
         },
         data: {
-          [CONFIG_GROUP]: JSON.stringify(normalized),
+          [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(normalized),
         },
       }
 
   if (configMap.value) {
     await coreApiClient.configMap.updateConfigMap({
-      name: CONFIG_MAP_NAME,
+      name: MY_DOCS_CONFIG_MAP_NAME,
       configMap: next,
     })
   } else {
@@ -149,35 +139,124 @@ async function handleSubmit(values: SettingsForm) {
         name="my-docs-settings-form"
         :actions="false"
         @submit="handleSubmit"
-      >
-        <FormKit
-          type="select"
-          name="defaultSort"
-          label="默认排序"
-          :value="formState.defaultSort"
-          :options="[
-            { label: '排序权重升序', value: 'priorityAsc' },
-            { label: '创建时间倒序', value: 'createdDesc' },
-            { label: '标题升序', value: 'titleAsc' },
-          ]"
-          validation="required"
-        />
-        <FormKit
-          type="number"
-          name="pageSize"
-          label="每页数量"
-          :value="formState.pageSize"
-          validation="required|min:5|max:100"
-        />
-        <FormKit
-          type="select"
-          name="defaultLibraryName"
-          label="默认文档库"
-          :value="formState.defaultLibraryName"
-          :options="libraryOptions"
-          searchable
-          clearable
-        />
+        >
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">基础设置</h3>
+          <FormKit
+            type="select"
+            name="defaultSort"
+            label="默认排序"
+            :value="formState.defaultSort"
+            :options="[
+              { label: '排序权重升序', value: 'priorityAsc' },
+              { label: '创建时间倒序', value: 'createdDesc' },
+              { label: '标题升序', value: 'titleAsc' },
+            ]"
+            validation="required"
+          />
+          <FormKit
+            type="number"
+            name="pageSize"
+            label="每页数量"
+            :value="formState.pageSize"
+            validation="required|min:5|max:100"
+          />
+          <FormKit
+            type="select"
+            name="defaultLibraryName"
+            label="默认文档库"
+            :value="formState.defaultLibraryName"
+            :options="libraryOptions"
+            searchable
+            clearable
+          />
+        </div>
+
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">文档页面渲染</h3>
+          <p class="doc-settings-help">
+            这些设置用于前台文档页面的渲染表现，不影响后台文档编辑器。
+          </p>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="select"
+              name="renderContentTheme"
+              label="内容主题"
+              :value="formState.renderContentTheme"
+              :options="[
+                { label: 'Light', value: 'light' },
+                { label: 'Dark', value: 'dark' },
+                { label: 'WeChat', value: 'wechat' },
+                { label: 'Ant Design', value: 'ant-design' },
+              ]"
+              validation="required"
+            />
+            <FormKit
+              type="text"
+              name="renderCodeTheme"
+              label="代码主题"
+              :value="formState.renderCodeTheme"
+              help="填写 Vditor / Chroma 代码主题名，例如 github、monokai。"
+              validation="required|length:1,100"
+            />
+          </div>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="switch"
+              name="renderLineNumber"
+              label="代码行号"
+              :value="formState.renderLineNumber"
+            />
+            <FormKit
+              type="switch"
+              name="renderAutoSpace"
+              label="自动空格"
+              :value="formState.renderAutoSpace"
+            />
+            <FormKit
+              type="switch"
+              name="renderGfmAutoLink"
+              label="自动链接"
+              :value="formState.renderGfmAutoLink"
+            />
+            <FormKit
+              type="switch"
+              name="renderFootnotes"
+              label="脚注"
+              :value="formState.renderFootnotes"
+            />
+            <FormKit
+              type="switch"
+              name="renderMark"
+              label="Mark 标记"
+              :value="formState.renderMark"
+            />
+            <FormKit
+              type="switch"
+              name="renderFixTermTypo"
+              label="术语修正"
+              :value="formState.renderFixTermTypo"
+            />
+            <FormKit
+              type="switch"
+              name="renderParagraphBeginningSpace"
+              label="段首空两格"
+              :value="formState.renderParagraphBeginningSpace"
+            />
+            <FormKit
+              type="switch"
+              name="renderCodeBlockPreview"
+              label="代码块即时渲染"
+              :value="formState.renderCodeBlockPreview"
+            />
+            <FormKit
+              type="switch"
+              name="renderMathBlockPreview"
+              label="公式块即时渲染"
+              :value="formState.renderMathBlockPreview"
+            />
+          </div>
+        </div>
 
         <VSpace>
           <VButton type="secondary" @click="$formkit.submit('my-docs-settings-form')">
@@ -189,3 +268,30 @@ async function handleSubmit(values: SettingsForm) {
     </VCard>
   </div>
 </template>
+
+<style scoped>
+.doc-settings-section + .doc-settings-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.doc-settings-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.doc-settings-help {
+  margin: -8px 0 16px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.doc-settings-grid {
+  display: grid;
+  gap: 0 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+</style>
