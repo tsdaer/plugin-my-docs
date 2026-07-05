@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { VButton, VPageHeader, VLoading, Dialog, Toast } from '@halo-dev/components'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
@@ -172,6 +172,23 @@ async function loadDoc() {
 
 onMounted(loadDoc)
 watch(docName, loadDoc)
+
+function handleEditorKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    if (!loading.value && !saving.value) {
+      void handleSave()
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleEditorKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleEditorKeydown)
+})
 
 function handleBack() {
   router.push({ name: 'DocList', params: { libraryName: libraryName.value } })

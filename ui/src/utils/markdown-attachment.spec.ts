@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildMarkdownAttachment,
+  encodeMarkdownDestination,
   escapeMarkdownLabel,
   normalizeAttachmentUrl,
 } from './markdown-attachment'
@@ -38,5 +39,26 @@ describe('markdown attachment utils', () => {
     expect(buildMarkdownAttachment('file', 'upload/read me.pdf', 'link')).toBe(
       '[file](https://example.com/upload/read%20me.pdf)',
     )
+  })
+
+  it('appends image rendering params in the destination fragment', () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://example.com',
+      },
+    })
+
+    expect(
+      buildMarkdownAttachment('image', '/upload/hero.png', 'image', {
+        width: 50,
+        align: 'center',
+        pad: 16,
+      }),
+    ).toBe('![image](https://example.com/upload/hero.png#md-width=50&md-align=center&md-pad=16)')
+    expect(
+      encodeMarkdownDestination('https://cdn.example.com/a.png#preview', {
+        align: 'right',
+      }),
+    ).toBe('https://cdn.example.com/a.png#preview&md-align=right')
   })
 })

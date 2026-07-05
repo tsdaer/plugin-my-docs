@@ -23,21 +23,32 @@ import run.halo.app.extension.ReactiveExtensionClient;
 public class DocServiceImpl implements DocService {
 
     private final ReactiveExtensionClient client;
+    private final MarkdownRenderer markdownRenderer;
 
-    public DocServiceImpl(ReactiveExtensionClient client) {
+    public DocServiceImpl(ReactiveExtensionClient client, MarkdownRenderer markdownRenderer) {
         this.client = client;
+        this.markdownRenderer = markdownRenderer;
     }
 
     @Override
     public Mono<Doc> create(Doc doc) {
+        renderContent(doc);
         return ensureSlugUniqueInLibrary(doc)
             .then(client.create(doc));
     }
 
     @Override
     public Mono<Doc> update(Doc doc) {
+        renderContent(doc);
         return ensureSlugUniqueInLibrary(doc)
             .then(client.update(doc));
+    }
+
+    private void renderContent(Doc doc) {
+        if (doc == null || doc.getSpec() == null) {
+            return;
+        }
+        doc.getSpec().setContent(markdownRenderer.render(doc.getSpec().getRaw()));
     }
 
     /**
