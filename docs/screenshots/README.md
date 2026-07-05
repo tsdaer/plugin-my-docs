@@ -2,24 +2,30 @@
 
 本目录用于存放发布素材截图。
 
-当前主图文件：
+当前截图文件：
 
 - `console-libraries.webp`
 - `console-tree.webp`
+- `console-editor-0.webp`
+- `console-editor-1.webp`
 - `console-editor.webp`
+- `console-settings-0.webp`
+- `console-settings-1.webp`
 - `console-settings.webp`
 - `dashboard-widget.webp`
+- `site-index-0.webp`
+- `site-index-1.webp`
+- `site-index-2.webp`
 - `site-index.webp`
+- `site-detail-0.webp`
 - `site-detail.webp`
 
 具体拍摄要求见 [../screenshot-guide.md](../screenshot-guide.md)。
 
-补充截图：
+说明：
 
-- `console-editor-1.webp`：站内文档链接插入弹窗
-- `console-settings-1.webp`：文档页面渲染配置区域
-- `site-index-1.webp`：文档库文件夹选择弹窗
-- `site-index-2.webp`：单个文档库首页页内导航布局
+- 不带编号的文件用于发布主图占位
+- `-0`、`-1`、`-2` 文件用于展示同一功能的不同界面状态或细节
 
 ## 预览
 
@@ -29,14 +35,22 @@
 
 ![文档树管理](./console-tree.webp)
 
-![文档编辑页](./console-editor.webp)
+![文档编辑页-0](./console-editor-0.webp)
 
-![文档设置页](./console-settings.webp)
+![文档编辑页-1](./console-editor-1.webp)
+
+![文档设置页-0](./console-settings-0.webp)
+
+![文档设置页-1](./console-settings-1.webp)
 
 ![仪表盘统计组件](./dashboard-widget.webp)
 
 ### Site
 
-![文档库首页](./site-index.webp)
+![文档库首页-0](./site-index-0.webp)
 
-![文档详情页](./site-detail.webp)
+![文档库首页-1](./site-index-1.webp)
+
+![文档库首页-2](./site-index-2.webp)
+
+![文档详情页-0](./site-detail-0.webp)

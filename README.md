@@ -111,11 +111,19 @@ build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
 
 文档编辑页：
 
-![文档编辑页](./docs/screenshots/console-editor.webp)
+![文档编辑页-0](./docs/screenshots/console-editor-0.webp)
+
+文档编辑页，站内文档链接插入弹窗：
+
+![文档编辑页-1](./docs/screenshots/console-editor-1.webp)
 
 文档设置页：
 
-![文档设置页](./docs/screenshots/console-settings.webp)
+![文档设置页-0](./docs/screenshots/console-settings-0.webp)
+
+文档设置页，文档页面渲染配置：
+
+![文档设置页-1](./docs/screenshots/console-settings-1.webp)
 
 仪表盘统计组件：
 
@@ -125,11 +133,19 @@ build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
 
 文档库首页：
 
-![文档库首页](./docs/screenshots/site-index.webp)
+![文档库首页-0](./docs/screenshots/site-index-0.webp)
+
+文档库首页，文件夹选择弹窗：
+
+![文档库首页-1](./docs/screenshots/site-index-1.webp)
+
+单个文档库首页页内导航布局：
+
+![文档库首页-2](./docs/screenshots/site-index-2.webp)
 
 文档详情页：
 
-![文档详情页](./docs/screenshots/site-detail.webp)
+![文档详情页-0](./docs/screenshots/site-detail-0.webp)
 
 ## 功能概览
 
