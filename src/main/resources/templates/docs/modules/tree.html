@@ -1,19 +1,56 @@
-<nav xmlns:th="https://www.thymeleaf.org" th:fragment="tree(nodes, library, currentDoc)">
+<nav class="mdocs-nav-tree"
+     data-mdocs-collapsible-tree
+     th:attr="data-mdocs-scope=${'docs:' + library.spec.slug}"
+     xmlns:th="https://www.thymeleaf.org"
+     th:fragment="tree(nodes, library, currentDoc)">
   <style>
     .mdocs-nav-list { list-style: none; margin: 14px 0 0; padding: 0; }
     .mdocs-nav-list .mdocs-nav-list { margin-top: 4px; padding-left: 14px; border-left: 1px solid var(--mdocs-border); }
     .mdocs-nav-item { margin: 2px 0; }
-    .mdocs-nav-link { display: block; padding: 6px 8px; color: var(--mdocs-muted); text-decoration: none; border-radius: 6px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
+    .mdocs-nav-row { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+    .mdocs-nav-arrow { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 16px; height: 26px; color: var(--mdocs-muted); opacity: .72; transition: transform .2s ease, color .2s ease, opacity .2s ease; }
+    .mdocs-nav-arrow svg { width: 13px; height: 13px; pointer-events: none; }
+    .mdocs-nav-arrow.is-empty { opacity: 0; }
+    .mdocs-nav-item.is-expanded > .mdocs-nav-row .mdocs-nav-arrow { color: var(--mdocs-accent); opacity: 1; transform: rotate(90deg); }
+    .mdocs-nav-link { display: block; flex: 1 1 auto; min-width: 0; padding: 6px 8px; color: var(--mdocs-muted); text-decoration: none; border-radius: 6px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
     .mdocs-nav-link:hover, .mdocs-nav-link.is-active { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
+    .mdocs-pin-button { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 6px; color: var(--mdocs-muted); background: transparent; cursor: pointer; opacity: .42; transition: color .2s ease, background-color .2s ease, opacity .2s ease; }
+    .mdocs-pin-button svg { width: 14px; height: 14px; pointer-events: none; }
+    .mdocs-nav-row:hover .mdocs-pin-button, .mdocs-pin-button.is-pinned { opacity: 1; }
+    .mdocs-pin-button:hover, .mdocs-pin-button.is-pinned { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
+    .mdocs-nav-item.is-collapsed > .mdocs-nav-children { display: none; }
   </style>
+  <div th:replace="~{plugin:my-docs:docs/modules/tree :: treeNodes(nodes=${nodes}, library=${library}, currentDoc=${currentDoc})}"></div>
+</nav>
+
+<th:block xmlns:th="https://www.thymeleaf.org" th:fragment="treeNodes(nodes, library, currentDoc)">
   <ul class="mdocs-nav-list" th:if="${!#lists.isEmpty(nodes)}">
-    <li class="mdocs-nav-item" th:each="node : ${nodes}">
-      <a class="mdocs-nav-link"
-         th:classappend="${currentDoc != null and #strings.equals(currentDoc.metadata.name, node.doc.metadata.name)} ? ' is-active'"
-         th:href="@{/docs/{librarySlug}/{docSlug}(librarySlug=${library.spec.slug}, docSlug=${node.doc.spec.slug})}"
-         th:text="${node.doc.spec.title}">Doc</a>
-      <div th:if="${!#lists.isEmpty(node.children)}"
-           th:replace="~{plugin:my-docs:docs/modules/tree :: tree(nodes=${node.children}, library=${library}, currentDoc=${currentDoc})}"></div>
+    <li class="mdocs-nav-item"
+        data-mdocs-node
+        th:attr="data-mdocs-node-id=${node.doc.metadata.name},data-mdocs-current=${currentDoc != null and #strings.equals(currentDoc.metadata.name, node.doc.metadata.name)}"
+        th:each="node : ${nodes}">
+      <div class="mdocs-nav-row">
+        <span class="mdocs-nav-arrow"
+              data-mdocs-arrow
+              th:classappend="${#lists.isEmpty(node.children)} ? ' is-empty'"
+              aria-hidden="true">
+          <svg viewBox="0 0 16 16">
+            <path fill="currentColor" d="M6 3l5 5-5 5z"/>
+          </svg>
+        </span>
+        <a class="mdocs-nav-link"
+           th:classappend="${currentDoc != null and #strings.equals(currentDoc.metadata.name, node.doc.metadata.name)} ? ' is-active'"
+           th:href="@{/docs/{librarySlug}/{docSlug}(librarySlug=${library.spec.slug}, docSlug=${node.doc.spec.slug})}"
+           th:text="${node.doc.spec.title}">Doc</a>
+        <button class="mdocs-pin-button" type="button" aria-label="锚定此文档" title="锚定此文档" data-mdocs-pin>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M14 2l8 8-3 1-4 4 1 5-2 2-5-5-5 5-2-2 5-5-5-5 2-2 5 1 4-4zM7 10l7 7-.5-3.5 3.5-3.5 1.5-.5-4-4-.5 1.5-3.5 3.5z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="mdocs-nav-children" th:if="${!#lists.isEmpty(node.children)}">
+        <div th:replace="~{plugin:my-docs:docs/modules/tree :: treeNodes(nodes=${node.children}, library=${library}, currentDoc=${currentDoc})}"></div>
+      </div>
     </li>
   </ul>
-</nav>
+</th:block>

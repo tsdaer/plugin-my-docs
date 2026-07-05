@@ -28,8 +28,14 @@
     .mdocs-outline-title { margin: 0 0 14px; color: var(--mdocs-text-strong); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
     .mdocs-outline-list { list-style: none; margin: 0; padding: 0; }
     .mdocs-outline-item + .mdocs-outline-item { margin-top: 2px; }
-    .mdocs-outline-link { display: block; padding: 7px 10px 7px calc(10px + var(--mdocs-outline-depth, 0) * 14px); color: var(--mdocs-muted); text-decoration: none; border-radius: 8px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
+    .mdocs-outline-row { display: flex; align-items: center; gap: 4px; padding-left: calc(var(--mdocs-outline-depth, 0) * 14px); border-radius: 8px; }
+    .mdocs-outline-arrow { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 16px; height: 28px; color: var(--mdocs-muted); opacity: .72; transition: transform .2s ease, color .2s ease, opacity .2s ease; }
+    .mdocs-outline-arrow svg { width: 13px; height: 13px; pointer-events: none; }
+    .mdocs-outline-arrow.is-empty { opacity: 0; }
+    .mdocs-outline-item.is-expanded > .mdocs-outline-row .mdocs-outline-arrow { color: var(--mdocs-accent); opacity: 1; transform: rotate(90deg); }
+    .mdocs-outline-link { display: block; flex: 1 1 auto; min-width: 0; padding: 7px 10px; color: var(--mdocs-muted); text-decoration: none; border-radius: 8px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
     .mdocs-outline-link:hover, .mdocs-outline-link.is-active { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
+    .mdocs-outline-row:hover .mdocs-pin-button { opacity: 1; }
     .mdocs-content { line-height: 1.8; font-size: 16px; }
     .mdocs-content :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 88px; }
     .mdocs-content h2 { margin-top: 34px; border-bottom: 1px solid var(--mdocs-border); padding-bottom: 8px; color: var(--mdocs-text-strong); }
@@ -81,79 +87,6 @@
       <div th:replace="~{plugin:my-docs:docs/modules/outline :: outline(items=${detailContent.outline})}"></div>
     </aside>
   </main>
-  <script th:if="${!#lists.isEmpty(detailContent.outline)}">
-    (function () {
-      var links = Array.prototype.slice.call(document.querySelectorAll('.mdocs-outline-link[data-target]'));
-      if (!links.length) {
-        return;
-      }
-
-      var headings = links
-        .map(function (link) {
-          return document.getElementById(link.getAttribute('data-target'));
-        })
-        .filter(function (heading) {
-          return !!heading;
-        });
-
-      if (!headings.length) {
-        return;
-      }
-
-      var activeId = '';
-      var ticking = false;
-
-      function setActive(id) {
-        if (!id || id === activeId) {
-          return;
-        }
-        activeId = id;
-        links.forEach(function (link) {
-          link.classList.toggle('is-active', link.getAttribute('data-target') === id);
-        });
-      }
-
-      function resolveActiveId() {
-        var threshold = 140;
-        var current = headings[0].id;
-        headings.forEach(function (heading) {
-          if (heading.getBoundingClientRect().top - threshold <= 0) {
-            current = heading.id;
-          }
-        });
-        return current;
-      }
-
-      function syncActive() {
-        ticking = false;
-        setActive(resolveActiveId());
-      }
-
-      function requestSync() {
-        if (ticking) {
-          return;
-        }
-        ticking = true;
-        window.requestAnimationFrame(syncActive);
-      }
-
-      links.forEach(function (link) {
-        link.addEventListener('click', function () {
-          var details = link.closest('details');
-          if (details) {
-            details.removeAttribute('open');
-          }
-          requestSync();
-        });
-      });
-
-      window.addEventListener('scroll', requestSync, { passive: true });
-      window.addEventListener('resize', requestSync);
-      window.addEventListener('hashchange', requestSync);
-
-      requestSync();
-      window.setTimeout(requestSync, 80);
-    })();
-  </script>
+  <th:block th:replace="~{plugin:my-docs:docs/modules/collapse :: collapse}"></th:block>
 </body>
 </html>

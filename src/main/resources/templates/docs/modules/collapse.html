@@ -1,0 +1,288 @@
+<script xmlns:th="https://www.thymeleaf.org" th:fragment="collapse">
+  (function () {
+    var storagePrefix = 'my-docs:collapse:pins:';
+
+    function readPins(scope) {
+      try {
+        var stored = window.localStorage.getItem(storagePrefix + scope);
+        return new Set(stored ? JSON.parse(stored) : []);
+      } catch (ignored) {
+        return new Set();
+      }
+    }
+
+    function writePins(scope, pins) {
+      try {
+        window.localStorage.setItem(storagePrefix + scope, JSON.stringify(Array.from(pins)));
+      } catch (ignored) {
+      }
+    }
+
+    function scopeFor(panel) {
+      if (panel.dataset.mdocsScope) {
+        return panel.dataset.mdocsScope;
+      }
+      if (panel.classList.contains('mdocs-outline-tree')) {
+        return 'outline:' + window.location.pathname;
+      }
+      return 'tree:' + window.location.pathname;
+    }
+
+    function buildModels(panel) {
+      var elements = Array.prototype.slice.call(panel.querySelectorAll('[data-mdocs-node]'));
+      var byId = new Map();
+      var stack = [];
+
+      return elements.map(function (element) {
+        var id = element.dataset.mdocsNodeId;
+        var parentId = '';
+        var depth = Number(element.dataset.mdocsDepth || 0);
+
+        if (panel.classList.contains('mdocs-outline-tree')) {
+          while (stack.length && stack[stack.length - 1].depth >= depth) {
+            stack.pop();
+          }
+          parentId = stack.length ? stack[stack.length - 1].id : '';
+        } else {
+          var parent = element.parentElement.closest('[data-mdocs-node]');
+          parentId = parent ? parent.dataset.mdocsNodeId : '';
+          depth = parent ? Number(parent.dataset.mdocsComputedDepth || 0) + 1 : 0;
+          element.dataset.mdocsComputedDepth = String(depth);
+        }
+
+        var model = {
+          element: element,
+          id: id,
+          parentId: parentId,
+          depth: depth,
+          children: []
+        };
+        byId.set(id, model);
+        if (panel.classList.contains('mdocs-outline-tree')) {
+          stack.push(model);
+        }
+        return model;
+      }).map(function (model, index, models) {
+        model.byId = byId;
+        if (model.parentId && byId.has(model.parentId)) {
+          byId.get(model.parentId).children.push(model);
+        }
+        return model;
+      });
+    }
+
+    function directRow(element) {
+      return Array.prototype.find.call(element.children, function (child) {
+        return child.classList.contains('mdocs-nav-row') || child.classList.contains('mdocs-outline-row');
+      });
+    }
+
+    function ancestorIds(model) {
+      var ids = [];
+      var cursor = model;
+      while (cursor && cursor.parentId && cursor.byId.has(cursor.parentId)) {
+        cursor = cursor.byId.get(cursor.parentId);
+        ids.push(cursor.id);
+      }
+      return ids;
+    }
+
+    function isVisible(model, expanded) {
+      var cursor = model;
+      while (cursor.parentId && cursor.byId.has(cursor.parentId)) {
+        cursor = cursor.byId.get(cursor.parentId);
+        if (!expanded.has(cursor.id)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function createController(panel) {
+      var models = buildModels(panel);
+      if (!models.length) {
+        return undefined;
+      }
+
+      var byId = models[0].byId;
+      var scope = scopeFor(panel);
+      var pins = readPins(scope);
+
+      function currentModel() {
+        return models.find(function (model) {
+          var row = directRow(model.element);
+          return model.element.dataset.mdocsCurrent === 'true'
+            || !!(row && row.querySelector('.is-active[data-target], .is-active.mdocs-nav-link'));
+        });
+      }
+
+      function calculateExpanded(current) {
+        var expanded = new Set();
+        if (!current && pins.size === 0) {
+          models.forEach(function (model) {
+            expanded.add(model.id);
+          });
+          return expanded;
+        }
+
+        if (current) {
+          expanded.add(current.id);
+          ancestorIds(current).forEach(function (id) {
+            expanded.add(id);
+          });
+        }
+
+        pins.forEach(function (id) {
+          var pinned = byId.get(id);
+          if (!pinned) {
+            return;
+          }
+          expanded.add(id);
+          ancestorIds(pinned).forEach(function (ancestorId) {
+            expanded.add(ancestorId);
+          });
+        });
+        return expanded;
+      }
+
+      function syncPins() {
+        models.forEach(function (model) {
+          var row = directRow(model.element);
+          var button = row ? row.querySelector('[data-mdocs-pin]') : undefined;
+          if (!button) {
+            return;
+          }
+          var pinned = pins.has(model.id);
+          button.classList.toggle('is-pinned', pinned);
+          button.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+          button.setAttribute('title', pinned ? '取消锚定' : '锚定');
+        });
+      }
+
+      function apply() {
+        pins = readPins(scope);
+        var expanded = calculateExpanded(currentModel());
+        models.forEach(function (model) {
+          var hasChildren = model.children.length > 0;
+          var visible = isVisible(model, expanded);
+          var row = directRow(model.element);
+          var arrow = row ? row.querySelector('[data-mdocs-arrow]') : undefined;
+          if (arrow) {
+            arrow.classList.toggle('is-empty', !hasChildren);
+          }
+          model.element.hidden = !visible;
+          model.element.classList.toggle('is-collapsed', hasChildren && !expanded.has(model.id));
+          model.element.classList.toggle('is-expanded', hasChildren && expanded.has(model.id));
+        });
+        syncPins();
+      }
+
+      models.forEach(function (model) {
+        var row = directRow(model.element);
+        var button = row ? row.querySelector('[data-mdocs-pin]') : undefined;
+        if (!button) {
+          return;
+        }
+        button.addEventListener('click', function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (pins.has(model.id)) {
+            pins.delete(model.id);
+          } else {
+            pins.add(model.id);
+          }
+          writePins(scope, pins);
+          window.dispatchEvent(new CustomEvent('mdocs:pins-changed', { detail: { scope: scope } }));
+          apply();
+        });
+      });
+
+      window.addEventListener('mdocs:pins-changed', function (event) {
+        if (event.detail && event.detail.scope === scope) {
+          apply();
+        }
+      });
+
+      apply();
+      return {
+        apply: apply
+      };
+    }
+
+    var panels = Array.prototype.slice.call(document.querySelectorAll('[data-mdocs-collapsible-tree]'))
+      .filter(function (panel) {
+        return !panel.parentElement.closest('[data-mdocs-collapsible-tree]');
+      });
+    var controllers = panels.map(createController).filter(Boolean);
+
+    var outlineLinks = Array.prototype.slice.call(document.querySelectorAll('.mdocs-outline-link[data-target]'));
+    var headings = outlineLinks
+      .map(function (link) {
+        return document.getElementById(link.getAttribute('data-target'));
+      })
+      .filter(function (heading, index, all) {
+        return !!heading && all.indexOf(heading) === index;
+      });
+
+    if (!outlineLinks.length || !headings.length) {
+      return;
+    }
+
+    var activeId = '';
+    var ticking = false;
+
+    function setActive(id) {
+      if (!id || id === activeId) {
+        return;
+      }
+      activeId = id;
+      outlineLinks.forEach(function (link) {
+        link.classList.toggle('is-active', link.getAttribute('data-target') === id);
+      });
+      controllers.forEach(function (controller) {
+        controller.apply();
+      });
+    }
+
+    function resolveActiveId() {
+      var threshold = 140;
+      var current = headings[0].id;
+      headings.forEach(function (heading) {
+        if (heading.getBoundingClientRect().top - threshold <= 0) {
+          current = heading.id;
+        }
+      });
+      return current;
+    }
+
+    function syncActive() {
+      ticking = false;
+      setActive(resolveActiveId());
+    }
+
+    function requestSync() {
+      if (ticking) {
+        return;
+      }
+      ticking = true;
+      window.requestAnimationFrame(syncActive);
+    }
+
+    outlineLinks.forEach(function (link) {
+      link.addEventListener('click', function () {
+        var details = link.closest('details');
+        if (details) {
+          details.removeAttribute('open');
+        }
+        requestSync();
+      });
+    });
+
+    window.addEventListener('scroll', requestSync, { passive: true });
+    window.addEventListener('resize', requestSync);
+    window.addEventListener('hashchange', requestSync);
+
+    requestSync();
+    window.setTimeout(requestSync, 80);
+  })();
+</script>

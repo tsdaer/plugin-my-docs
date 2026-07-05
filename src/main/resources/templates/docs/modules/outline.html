@@ -1,10 +1,27 @@
-<nav xmlns:th="https://www.thymeleaf.org" th:fragment="outline(items)">
+<nav class="mdocs-outline-tree"
+     data-mdocs-collapsible-tree
+     xmlns:th="https://www.thymeleaf.org"
+     th:fragment="outline(items)">
   <ul class="mdocs-outline-list" th:if="${!#lists.isEmpty(items)}">
-    <li class="mdocs-outline-item" th:each="item : ${items}">
-      <a class="mdocs-outline-link"
-         th:attr="href=${'#' + item.id},data-target=${item.id}"
-         th:style="'--mdocs-outline-depth:' + ${item.depth}"
-         th:text="${item.text}">Heading</a>
+    <li class="mdocs-outline-item"
+        data-mdocs-node
+        th:attr="data-mdocs-node-id=${item.id},data-mdocs-depth=${item.depth}"
+        th:each="item : ${items}">
+      <div class="mdocs-outline-row" th:style="'--mdocs-outline-depth:' + ${item.depth}">
+        <span class="mdocs-outline-arrow is-empty" data-mdocs-arrow aria-hidden="true">
+          <svg viewBox="0 0 16 16">
+            <path fill="currentColor" d="M6 3l5 5-5 5z"/>
+          </svg>
+        </span>
+        <a class="mdocs-outline-link"
+           th:attr="href=${'#' + item.id},data-target=${item.id}"
+           th:text="${item.text}">Heading</a>
+        <button class="mdocs-pin-button" type="button" aria-label="锚定此标题" title="锚定此标题" data-mdocs-pin>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" d="M14 2l8 8-3 1-4 4 1 5-2 2-5-5-5 5-2-2 5-5-5-5 2-2 5 1 4-4zM7 10l7 7-.5-3.5 3.5-3.5 1.5-.5-4-4-.5 1.5-3.5 3.5z"/>
+          </svg>
+        </button>
+      </div>
     </li>
   </ul>
 </nav>
