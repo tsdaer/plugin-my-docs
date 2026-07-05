@@ -4,7 +4,7 @@
 
 `my-docs` 在 Halo 原有文章与页面模型之外，补充一套独立的文档系统，用来承载产品手册、开发文档、帮助中心这类需要树形目录和连续阅读体验的内容。
 
-项目开发路线见 [PROJECT_PLAN.md](./PROJECT_PLAN.md)，发布前检查项见 [docs/release-checklist.md](./docs/release-checklist.md)，发行说明模板见 [docs/release-notes-template.md](./docs/release-notes-template.md)，截图执行说明见 [docs/screenshot-guide.md](./docs/screenshot-guide.md)。
+如果你需要开发、调试、构建或发布本插件，请查看 [docs/development.md](./docs/development.md)。
 
 ## 当前能力
 
@@ -18,18 +18,7 @@
 - 插件设置与仪表盘：支持默认排序、默认文档库、文档库首页布局、文档页面渲染等设置，并提供后台统计卡片
 - 文档阅读增强：支持同库文档标题短链接跳转，以及详情页正文大纲、滚动高亮、移动端折叠目录与跟随 Halo 的主题切换
 
-## 当前状态
-
-当前主线里程碑 M0-M4 已完成，M5 正在推进，主要剩余项是：
-
-- 可选能力：评论系统集成
-
-远端发布链路已验证：
-
-- GitHub Actions CI/CD 可正常执行
-- GitHub Release 已成功附带插件 jar
-
-## 安装与升级
+## 安装与使用
 
 安装方式：
 
@@ -37,69 +26,25 @@
 2. 在 Halo Console 的「插件」页面上传 jar。
 3. 安装并启用 `my-docs`。
 
+启用后可直接使用：
+
+- Halo Console 侧边栏中的「文档」与「文档设置」入口
+- 前台文档首页：`/docs`
+- 单个文档库页：`/docs/{librarySlug}`
+- 文档详情页：`/docs/{librarySlug}/{docSlug}`
+
+## 兼容性
+
+- Halo `>= 2.25.0`
+
+## 升级建议
+
 升级前建议先备份 Halo 数据，并在升级后检查：
 
 - 文档库列表与文档树是否正常加载
 - 文档编辑保存后前台是否能正常渲染
 - `/docs`、`/docs/{librarySlug}`、`/docs/{librarySlug}/{docSlug}` 是否可访问
 - 搜索是否能命中文档内容
-
-## 环境要求
-
-- Halo `>= 2.25.0`
-- Java 21+
-- Node.js 18+ 与 pnpm 10+
-- Docker（本地通过 `haloServer` 启动 Halo 时需要）
-
-## 本地开发
-
-```bash
-# 安装前端依赖
-cd ui
-pnpm install
-
-# 前端监听构建
-pnpm dev
-
-# 回到项目根目录，启动 Halo + 插件
-cd ..
-./gradlew haloServer
-```
-
-默认后台地址：`http://localhost:8090/console`
-
-默认账号密码：`admin` / `admin`
-
-后端改动后可使用：
-
-```bash
-./gradlew reload
-# 或
-./gradlew watch
-```
-
-## 测试与构建
-
-```bash
-# 后端测试
-./gradlew test
-
-# 整体构建（含 UI 检查、单测、打包）
-./gradlew build
-```
-
-构建产物位于 `build/libs/`，当前插件 jar 名称示例：
-
-```text
-build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
-```
-
-## 发布资料
-
-- 发布检查清单：[docs/release-checklist.md](./docs/release-checklist.md)
-- Release 说明模板：[docs/release-notes-template.md](./docs/release-notes-template.md)
-- 截图指南：[docs/screenshot-guide.md](./docs/screenshot-guide.md)
-- 截图目录：[docs/screenshots/README.md](./docs/screenshots/README.md)
 
 ## 界面预览
 
@@ -170,29 +115,6 @@ build/libs/plugin-my-docs-1.0.0-SNAPSHOT.jar
 - 文档库首页支持按全局行号跨页排布，并可在坐标冲突时显示带名称和描述的文件夹卡片，点击后弹窗选择文档库
 - 文档页面渲染可由插件设置统一控制
 - 文档站点主题跟随 Halo 当前主题设置，而不是浏览器系统主题
-- 可被主题覆盖的 Thymeleaf 模板：`src/main/resources/templates/docs/**`
-
-### 服务端能力
-
-- `DocLibrary`、`Doc` 自定义 Extension
-- 应用层 slug 唯一性校验
-- `DocReconciler` 自动将 Markdown 渲染为 HTML
-- `DocFinder` 向主题暴露已发布文档数据
-- `DocSearchDocumentsProvider` 接入 Halo 搜索
-
-## 目录结构
-
-```text
-plugin-my-docs/
-├── src/main/java/com/github/mydocs/      # 插件后端代码
-├── src/main/resources/plugin.yaml        # 插件清单
-├── src/main/resources/extensions/        # 设置、角色模板等扩展资源
-├── src/main/resources/templates/docs/    # 前台模板
-├── src/test/java/com/github/mydocs/      # 后端测试
-├── ui/src/                               # Console 前端代码
-├── PROJECT_PLAN.md                       # 里程碑与设计计划
-└── docs/                                 # 发布检查、截图与发行说明资料
-```
 
 ## 许可证
 
