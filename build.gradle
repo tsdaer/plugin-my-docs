@@ -43,6 +43,10 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.register('processUiResources', Copy) {
+    // 先清空目标目录，避免上一次构建遗留的旧 chunk（Copy 任务只增不删）被打进 JAR。
+    doFirst {
+        delete layout.buildDirectory.dir('resources/main/ui')
+    }
     from project(':ui').layout.buildDirectory.dir('dist')
     into layout.buildDirectory.dir('resources/main/ui')
     dependsOn project(':ui').tasks.named('assemble')
