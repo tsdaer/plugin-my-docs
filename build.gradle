@@ -61,14 +61,14 @@ halo {
     version = '2.25'
 }
 
-// 从自动生成的 CRUD API（docs.halo.run）的 OpenAPI spec 生成前端 TypeScript 客户端。
-// DocEndpoint（console.api.docs.halo.run）用标准 WebFlux route，不进 spec，前端手写 axiosInstance 调用。
+// 从自动生成的 CRUD API（my-docs.tsdaer.run）的 OpenAPI spec 生成前端 TypeScript 客户端。
+// DocEndpoint（console.api.my-docs.tsdaer.run）用标准 WebFlux route，不进 spec，前端手写 axiosInstance 调用。
 haloPlugin {
     openApi {
         groupingRules {
             extensionApis {
                 displayName = 'Extension API for my-docs'
-                pathsToMatch = ['/apis/docs.halo.run/v1alpha1/**']
+                pathsToMatch = ['/apis/my-docs.tsdaer.run/v1alpha1/**']
             }
         }
         groupedApiMappings = [

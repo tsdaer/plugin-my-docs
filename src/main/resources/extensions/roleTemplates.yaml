@@ -10,7 +10,7 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:my-docs:libraries:view"]
 rules:
-  - apiGroups: ["docs.halo.run"]
+  - apiGroups: ["my-docs.tsdaer.run"]
     resources: ["doclibraries", "docs"]
     verbs: ["get", "list"]
 ---
@@ -28,15 +28,18 @@ metadata:
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:my-docs:libraries:manage"]
 rules:
-  - apiGroups: ["docs.halo.run"]
+  - apiGroups: ["my-docs.tsdaer.run"]
     resources: ["doclibraries", "docs"]
     verbs: ["*"]
-  - apiGroups: ["console.api.docs.halo.run"]
+  - apiGroups: ["console.api.my-docs.tsdaer.run"]
     resources: ["docs"]
     verbs: ["*"]
+  # 仅限本插件自身的 configmap：Halo 在插件启动时已按 Setting 默认值自动创建该 ConfigMap，
+  # 故无需 list/create；resourceNames 只能约束按名操作的动词（get/update/patch）。
   - apiGroups: [""]
     resources: ["configmaps"]
-    verbs: ["get", "list", "create", "update", "patch"]
+    resourceNames: ["my-docs-configmap"]
+    verbs: ["get", "update", "patch"]
 ---
 apiVersion: v1alpha1
 kind: Role
@@ -47,8 +50,8 @@ metadata:
     halo.run/hidden: "true"
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
 rules:
-  - apiGroups: ["api.docs.halo.run"]
+  - apiGroups: ["api.my-docs.tsdaer.run"]
     resources: ["libraries", "docs", "trees"]
     verbs: ["get", "list"]
-  - nonResourceURLs: ["/apis/api.docs.halo.run/v1alpha1/**"]
+  - nonResourceURLs: ["/apis/api.my-docs.tsdaer.run/v1alpha1/**"]
     verbs: ["get"]

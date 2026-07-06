@@ -4,7 +4,7 @@ import type { Doc } from '@/api/generated'
 
 function makeDoc(name: string, parent?: string, priority?: number): Doc {
   return {
-    apiVersion: 'docs.halo.run/v1alpha1',
+    apiVersion: 'my-docs.tsdaer.run/v1alpha1',
     kind: 'Doc',
     metadata: { name },
     spec: {

@@ -88,7 +88,7 @@ async function handleSubmit(values: FormState) {
       })
     } else {
       const toCreate: DocLibrary = {
-        apiVersion: 'docs.halo.run/v1alpha1',
+        apiVersion: 'my-docs.tsdaer.run/v1alpha1',
         kind: 'DocLibrary',
         metadata: {
           generateName: 'doc-library-',

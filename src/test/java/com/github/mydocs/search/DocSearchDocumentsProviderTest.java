@@ -44,7 +44,7 @@ class DocSearchDocumentsProviderTest {
 
         assertThat(documents).hasSize(1);
         var document = documents.getFirst();
-        assertThat(document.getId()).isEqualTo("doc.docs.halo.run/doc-1");
+        assertThat(document.getId()).isEqualTo("doc.my-docs.tsdaer.run/doc-1");
         assertThat(document.getMetadataName()).isEqualTo("doc-1");
         assertThat(document.getTitle()).isEqualTo("Intro");
         assertThat(document.getContent()).isEqualTo("Hello search");

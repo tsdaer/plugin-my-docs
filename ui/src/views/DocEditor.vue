@@ -13,7 +13,7 @@ import { buildDocTree, type DocTreeNode } from '@/utils/doc-tree'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
 import DocNavTree from '@/components/DocNavTree.vue'
 
-const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
+const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 const MAX_DOCS = 200
 
 const route = useRoute()
@@ -227,7 +227,7 @@ async function handleSave() {
       original.value = data
     } else {
       const toCreate: Doc = {
-        apiVersion: 'docs.halo.run/v1alpha1',
+        apiVersion: 'my-docs.tsdaer.run/v1alpha1',
         kind: 'Doc',
         metadata: {
           generateName: 'doc-',

@@ -20,7 +20,7 @@ import run.halo.app.extension.GVK;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @GVK(
-    group = "docs.halo.run",
+    group = "my-docs.tsdaer.run",
     version = "v1alpha1",
     kind = "Doc",
     plural = "docs",

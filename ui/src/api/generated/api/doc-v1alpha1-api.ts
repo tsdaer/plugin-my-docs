@@ -40,7 +40,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
          * @throws {RequiredError}
          */
         createDoc: async (doc?: Doc, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs`;
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -83,7 +83,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
         deleteDoc: async (name: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'name' is not null or undefined
             assertParamExists('deleteDoc', 'name', name)
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs/{name}`
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs/{name}`
                 .replace(`{${"name"}}`, encodeURIComponent(String(name)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -124,7 +124,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
         getDoc: async (name: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'name' is not null or undefined
             assertParamExists('getDoc', 'name', name)
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs/{name}`
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs/{name}`
                 .replace(`{${"name"}}`, encodeURIComponent(String(name)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -167,7 +167,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
          * @throws {RequiredError}
          */
         listDoc: async (page?: number, size?: number, labelSelector?: Array<string>, fieldSelector?: Array<string>, sort?: Array<string>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs`;
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -228,7 +228,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
         patchDoc: async (name: string, jsonPatchInner?: Array<JsonPatchInner>, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'name' is not null or undefined
             assertParamExists('patchDoc', 'name', name)
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs/{name}`
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs/{name}`
                 .replace(`{${"name"}}`, encodeURIComponent(String(name)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -273,7 +273,7 @@ export const DocV1alpha1ApiAxiosParamCreator = function (configuration?: Configu
         updateDoc: async (name: string, doc?: Doc, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'name' is not null or undefined
             assertParamExists('updateDoc', 'name', name)
-            const localVarPath = `/apis/docs.halo.run/v1alpha1/docs/{name}`
+            const localVarPath = `/apis/my-docs.tsdaer.run/v1alpha1/docs/{name}`
                 .replace(`{${"name"}}`, encodeURIComponent(String(name)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);

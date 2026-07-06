@@ -93,7 +93,7 @@ my-docs 注册了一个 Halo Finder（名为 "myDocs"，类 com.github.mydocs.fi
   Mono<List<DocFinder.DocTreeNode>> tree(String libraryName) / treeByLibrarySlug(String librarySlug) // 树节点含 getDoc()/getChildren()
 若确需自定义查询才用 ReactiveExtensionClient（注意平台约束见下）。
 
-【数据模型】Doc / DocLibrary 是 my-docs 的自定义 Extension（GVK：group=docs.halo.run，version=v1alpha1，kind=Doc / DocLibrary）：
+【数据模型】Doc / DocLibrary 是 my-docs 的自定义 Extension（GVK：group=my-docs.tsdaer.run，version=v1alpha1，kind=Doc / DocLibrary）：
 - Doc.getSpec()：title、slug、libraryName（所属库的 metadata.name）、parent（父文档 metadata.name，空为顶层）、priority（越小越前）、content（渲染后 HTML）、raw（Markdown 原文）、rawType、published、publishTime、customHeadHtml、customBodyHtml
 - DocLibrary.getSpec()：title、slug（全局唯一）、description、cover、priority、customHeadHtml、customBodyHtml
 - 排序惯例：priority 升序、再按 title、再按 metadata.name。

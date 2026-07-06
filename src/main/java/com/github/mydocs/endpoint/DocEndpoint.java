@@ -17,7 +17,7 @@ import run.halo.app.extension.GroupVersion;
 /**
  * <p>文档的 Console 自定义 API。</p>
  * <p>创建/更新走本端点而非自动生成的 CRUD API，以便执行 slug 库内唯一等应用层校验。</p>
- * <p>路径会自动加上前缀 {@code /apis/console.api.docs.halo.run/v1alpha1/}。</p>
+ * <p>路径会自动加上前缀 {@code /apis/console.api.my-docs.tsdaer.run/v1alpha1/}。</p>
  *
  * @author tsdaer
  * @since 1.0.0
@@ -53,6 +53,6 @@ public class DocEndpoint implements CustomEndpoint {
 
     @Override
     public GroupVersion groupVersion() {
-        return new GroupVersion("console.api.docs.halo.run", "v1alpha1");
+        return new GroupVersion("console.api.my-docs.tsdaer.run", "v1alpha1");
     }
 }

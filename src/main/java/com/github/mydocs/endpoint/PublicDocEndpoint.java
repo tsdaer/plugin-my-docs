@@ -76,6 +76,6 @@ public class PublicDocEndpoint implements CustomEndpoint {
 
     @Override
     public GroupVersion groupVersion() {
-        return new GroupVersion("api.docs.halo.run", "v1alpha1");
+        return new GroupVersion("api.my-docs.tsdaer.run", "v1alpha1");
     }
 }

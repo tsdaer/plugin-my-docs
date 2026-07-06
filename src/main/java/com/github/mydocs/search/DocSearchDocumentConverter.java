@@ -12,7 +12,7 @@ import run.halo.app.search.HaloDocument;
 @Component
 public class DocSearchDocumentConverter {
 
-    public static final String TYPE = "doc.docs.halo.run";
+    public static final String TYPE = "doc.my-docs.tsdaer.run";
 
     private static final int DESCRIPTION_MAX_LENGTH = 160;
 

@@ -18,7 +18,7 @@ import {
 } from '@/utils/doc-tree'
 import DocTreeNodeComp from '@/components/DocTreeNode.vue'
 
-const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
+const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 // 树需要全量节点才能组装，暂不分页；超出上限记录并提示。
 const MAX_DOCS = 200
 

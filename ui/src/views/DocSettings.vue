@@ -2,6 +2,7 @@
 import { VButton, VCard, VLoading, VPageHeader, VSpace, Toast, IconSettings, Dialog } from '@halo-dev/components'
 import { coreApiClient, axiosInstance } from '@halo-dev/api-client'
 import type { ConfigMap } from '@halo-dev/api-client'
+import { isAxiosError } from 'axios'
 import { computed, ref, watch } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
@@ -30,7 +31,7 @@ import {
 } from '@/utils/my-docs-settings'
 import { SNIPPET_PROMPT, EXTENSION_PROMPT } from '@/utils/ai-prompts'
 
-const DOC_ENDPOINT = '/apis/console.api.docs.halo.run/v1alpha1/docs'
+const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 const LIST_PAGE_SIZE = 200
 
 const router = useRouter()
@@ -41,12 +42,19 @@ const docApi = new DocV1alpha1Api(undefined, '', axiosInstance)
 const { data: configMap, isLoading: isConfigLoading } = useQuery({
   queryKey: ['my-docs-settings-configmap'],
   queryFn: async () => {
-    const { data } = await coreApiClient.configMap.listConfigMap({
-      page: 1,
-      size: 1,
-      fieldSelector: [`metadata.name=${MY_DOCS_CONFIG_MAP_NAME}`],
-    })
-    return data.items[0]
+    // 按名读取本插件的 ConfigMap（Halo 在插件启动时已自动创建）。
+    // 用 getConfigMap 而非 listConfigMap，以便被委派角色仅需 my-docs-configmap 的 get 权限。
+    try {
+      const { data } = await coreApiClient.configMap.getConfigMap({
+        name: MY_DOCS_CONFIG_MAP_NAME,
+      })
+      return data
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 404) {
+        return undefined
+      }
+      throw error
+    }
   },
 })
 
@@ -315,16 +323,11 @@ async function persistSettings(normalized: MyDocsSettings) {
         },
       }
 
-  if (configMap.value) {
-    await coreApiClient.configMap.updateConfigMap({
-      name: MY_DOCS_CONFIG_MAP_NAME,
-      configMap: next,
-    })
-  } else {
-    await coreApiClient.configMap.createConfigMap({
-      configMap: next,
-    })
-  }
+  // ConfigMap 由 Halo 在插件启动时自动创建，始终存在，因此只需 update（无需 create 权限）。
+  await coreApiClient.configMap.updateConfigMap({
+    name: MY_DOCS_CONFIG_MAP_NAME,
+    configMap: next,
+  })
 
   Toast.success('设置已保存')
   await queryClient.invalidateQueries({ queryKey: ['my-docs-settings-configmap'] })
@@ -442,7 +445,7 @@ function toLibraryPayload(record: DocLibraryBackupRecord, current?: DocLibrary):
   }
 
   return {
-    apiVersion: 'docs.halo.run/v1alpha1',
+    apiVersion: 'my-docs.tsdaer.run/v1alpha1',
     kind: 'DocLibrary',
     metadata: {
       name: record.name,
@@ -467,7 +470,7 @@ function toDocPayload(record: DocBackupRecord, current?: Doc): Doc {
   }
 
   return {
-    apiVersion: 'docs.halo.run/v1alpha1',
+    apiVersion: 'my-docs.tsdaer.run/v1alpha1',
     kind: 'Doc',
     metadata: {
       name: record.name,
@@ -553,16 +556,11 @@ async function restoreBackup(backup: MyDocsBackupFile) {
   const rawSettings = stringifyMyDocsSettings(normalizedSettings)
   const next = buildExtensionConfigMap(rawSettings)
 
-  if (configMap.value) {
-    await coreApiClient.configMap.updateConfigMap({
-      name: MY_DOCS_CONFIG_MAP_NAME,
-      configMap: next,
-    })
-  } else {
-    await coreApiClient.configMap.createConfigMap({
-      configMap: next,
-    })
-  }
+  // ConfigMap 由 Halo 在插件启动时自动创建，始终存在，因此只需 update（无需 create 权限）。
+  await coreApiClient.configMap.updateConfigMap({
+    name: MY_DOCS_CONFIG_MAP_NAME,
+    configMap: next,
+  })
 
   settingsState.value = normalizedSettings
   await Promise.all([
