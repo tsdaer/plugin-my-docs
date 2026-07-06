@@ -358,22 +358,24 @@ async function handleSave() {
             <p class="doc-editor-custom-code-hint">
               ⚠️ 以下代码会原样注入到本文档详情页并在访客浏览器执行，请仅填入可信代码。注入顺序：全局 → 文档库 → 本文档。
             </p>
-            <FormKit
-              v-model="formState.customHeadHtml"
-              type="textarea"
-              name="customHeadHtml"
-              label="head 代码"
-              help="注入到 <head> 末尾，适合 <style>、meta。"
-              :rows="4"
-            />
-            <FormKit
-              v-model="formState.customBodyHtml"
-              type="textarea"
-              name="customBodyHtml"
-              label="body 代码"
-              help="注入到 <body> 末尾，适合自定义 HTML、<script>。"
-              :rows="4"
-            />
+            <div class="doc-editor-custom-code-grid">
+              <FormKit
+                v-model="formState.customHeadHtml"
+                type="textarea"
+                name="customHeadHtml"
+                label="head 代码"
+                help="注入到 <head> 末尾，适合 <style>、meta。"
+                :rows="4"
+              />
+              <FormKit
+                v-model="formState.customBodyHtml"
+                type="textarea"
+                name="customBodyHtml"
+                label="body 代码"
+                help="注入到 <body> 末尾，适合自定义 HTML、<script>。"
+                :rows="4"
+              />
+            </div>
           </details>
         </FormKit>
 
@@ -467,6 +469,19 @@ async function handleSave() {
   margin: 8px 0;
   font-size: 12px;
   color: #b45309;
+}
+.doc-editor-custom-code-grid {
+  display: grid;
+  gap: 0 16px;
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.doc-editor-custom-code-grid :deep(.formkit-outer) {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.doc-editor-custom-code-grid :deep(.formkit-inner) {
+  height: auto;
 }
 .doc-editor-editor {
   flex: 1;

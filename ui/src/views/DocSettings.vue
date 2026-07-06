@@ -979,7 +979,7 @@ async function handleSubmit() {
             ⚠️ 以下代码会原样注入到全部文档阅读页，并在访客浏览器中执行。请仅填入你信任的代码——
             恶意脚本可能危害访客安全。文档库与单篇文档也可分别配置各自的代码，注入顺序为 全局 → 文档库 → 文档。
           </p>
-          <div class="doc-settings-grid">
+          <div class="doc-settings-grid doc-settings-grid--code">
             <FormKit
               type="textarea"
               name="customHeadHtml"
@@ -1050,6 +1050,7 @@ async function handleSubmit() {
 .doc-settings-grid {
   display: grid;
   gap: 0 16px;
+  align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
@@ -1057,6 +1058,15 @@ async function handleSubmit() {
   align-items: start;
   justify-content: start;
   grid-template-columns: repeat(2, minmax(0, 320px));
+}
+
+.doc-settings-grid--code :deep(.formkit-outer) {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.doc-settings-grid--code :deep(.formkit-inner) {
+  height: auto;
 }
 
 .doc-settings-grid--compact :deep(.formkit-outer) {
