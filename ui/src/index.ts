@@ -25,8 +25,8 @@ export default definePlugin({
           searchable: true,
           permissions: ['plugin:my-docs:libraries:view'],
           menu: {
-            name: '文档',
-            group: 'content',
+            name: '文档库',
+            group: '文档',
             icon: markRaw(RiBook2Line),
             priority: 40,
           },
@@ -48,7 +48,7 @@ export default definePlugin({
           permissions: ['plugin:my-docs:libraries:manage'],
           menu: {
             name: '文档设置',
-            group: 'content',
+            group: '文档',
             icon: markRaw(IconSettings),
             priority: 41,
           },
