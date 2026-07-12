@@ -17,8 +17,8 @@ spec:
   issues: https://github.com/tsdaer/plugin-my-docs/issues
   displayName: "文档"
   description: "为 Halo 网站添加文档（知识库）功能：按库与层级组织内容，提供带侧边目录树的文档阅读界面。"
-  settingName: my-docs-settings
-  configMapName: my-docs-configmap
+  settingName: "my-docs-settings"
+  configMapName: "my-docs-configmap"
   license:
     - name: "GPL-3.0"
       url: "https://github.com/tsdaer/plugin-my-docs/blob/master/LICENSE"
