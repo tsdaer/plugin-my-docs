@@ -21,6 +21,8 @@ my-docs vX.Y.Z
 - Markdown 编辑：支持附件库插入图片、文件和站内文档链接
 - 前台文档站点：提供 `/docs`、`/docs/{librarySlug}`、`/docs/{librarySlug}/{docSlug}` 页面
 - 文档阅读体验：支持侧边目录树、正文大纲、同库标题短链接跳转
+- 文档渲染设置：支持为浅色 / 深色模式分别配置自定义内容 CSS、正文 class 与代码主题
+- 数学公式：使用 RaTeX WASM + 透明 Canvas 渲染，公式颜色跟随正文主题
 - 搜索与 SEO：已发布文档可被 Halo 搜索索引，并输出页面级 SEO 元信息
 
 ## 安装
