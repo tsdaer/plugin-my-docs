@@ -86,14 +86,6 @@ const isImporting = ref(false)
 const importInput = ref<HTMLInputElement | null>(null)
 const renderThemeMode = ref<'light' | 'dark'>('light')
 
-const contentThemeOptions = [
-  { label: 'Light', value: 'light' },
-  { label: 'Dark', value: 'dark' },
-  { label: 'WeChat', value: 'wechat' },
-  { label: 'Ant Design', value: 'ant-design' },
-  { label: '自定义 CSS', value: 'custom' },
-]
-
 const settingsState = ref<MyDocsSettings>(parseMyDocsSettings())
 
 watch(
@@ -306,8 +298,6 @@ async function persistSettings(normalized: MyDocsSettings) {
     libraryIndexRowLayouts: normalized.libraryIndexRowLayouts,
     libraryIndexPlacements: normalized.libraryIndexPlacements,
     libraryIndexFolderTitles: normalized.libraryIndexFolderTitles,
-    renderContentThemeLight: normalized.renderContentThemeLight,
-    renderContentThemeDark: normalized.renderContentThemeDark,
     renderContentThemeLightUrl: normalized.renderContentThemeLightUrl,
     renderContentThemeDarkUrl: normalized.renderContentThemeDarkUrl,
     renderContentThemeLightClass: normalized.renderContentThemeLightClass,
@@ -940,12 +930,12 @@ async function handleSubmit() {
           <div v-if="renderThemeMode === 'light'" class="doc-theme-mode-panel" role="tabpanel">
             <div class="doc-settings-grid">
               <FormKit
-                type="select"
-                name="renderContentThemeLight"
-                label="浅色内容主题"
-                v-model="settingsState.renderContentThemeLight"
-                :options="contentThemeOptions"
-                validation="required"
+                type="text"
+                name="renderContentThemeLightUrl"
+                label="浅色主题 CSS 地址"
+                v-model="settingsState.renderContentThemeLightUrl"
+                help="可选，仅支持 https:// 地址或 / 开头的站内绝对路径；留空时使用基础回退样式。"
+                validation="length:0,1000"
               />
               <FormKit
                 type="text"
@@ -956,18 +946,7 @@ async function handleSubmit() {
                 validation="required|length:1,100"
               />
             </div>
-            <div
-              v-if="settingsState.renderContentThemeLight === 'custom'"
-              class="doc-settings-grid"
-            >
-              <FormKit
-                type="text"
-                name="renderContentThemeLightUrl"
-                label="浅色主题 CSS 地址"
-                v-model="settingsState.renderContentThemeLightUrl"
-                help="仅支持 https:// 地址或 / 开头的站内绝对路径。"
-                validation="required|length:1,1000"
-              />
+            <div class="doc-settings-grid">
               <FormKit
                 type="text"
                 name="renderContentThemeLightClass"
@@ -982,12 +961,12 @@ async function handleSubmit() {
           <div v-else class="doc-theme-mode-panel" role="tabpanel">
             <div class="doc-settings-grid">
               <FormKit
-                type="select"
-                name="renderContentThemeDark"
-                label="深色内容主题"
-                v-model="settingsState.renderContentThemeDark"
-                :options="contentThemeOptions"
-                validation="required"
+                type="text"
+                name="renderContentThemeDarkUrl"
+                label="深色主题 CSS 地址"
+                v-model="settingsState.renderContentThemeDarkUrl"
+                help="可选，仅支持 https:// 地址或 / 开头的站内绝对路径；留空时使用基础回退样式。"
+                validation="length:0,1000"
               />
               <FormKit
                 type="text"
@@ -998,15 +977,7 @@ async function handleSubmit() {
                 validation="required|length:1,100"
               />
             </div>
-            <div v-if="settingsState.renderContentThemeDark === 'custom'" class="doc-settings-grid">
-              <FormKit
-                type="text"
-                name="renderContentThemeDarkUrl"
-                label="深色主题 CSS 地址"
-                v-model="settingsState.renderContentThemeDarkUrl"
-                help="仅支持 https:// 地址或 / 开头的站内绝对路径。"
-                validation="required|length:1,1000"
-              />
+            <div class="doc-settings-grid">
               <FormKit
                 type="text"
                 name="renderContentThemeDarkClass"
@@ -1078,7 +1049,7 @@ async function handleSubmit() {
               type="switch"
               name="renderMathBlockPreview"
               label="数学公式渲染"
-              help="使用 KaTeX 渲染 $...$ 与 $$...$$ 公式。"
+              help="使用 RaTeX（WASM + Canvas）渲染 $...$ 与 $$...$$ 公式，失败时回退到 Vditor。"
               v-model="settingsState.renderMathBlockPreview"
             />
           </div>

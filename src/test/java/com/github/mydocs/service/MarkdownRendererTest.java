@@ -101,4 +101,26 @@ class MarkdownRendererTest {
             .contains("<span class=\"language-math\">a^2</span>")
             .contains("<div class=\"language-math\">b^2");
     }
+
+    @Test
+    void preservesComplexBlockAndColoredInlineMath() {
+        String html = renderer.render("""
+            $$
+            \\frac{1}{
+              \\Bigl(\\sqrt{\\phi \\sqrt{5}}-\\phi\\Bigr) e^{
+              \\frac25 \\pi}} = 1+\\frac{e^{-2\\pi}} {1+\\frac{e^{-4\\pi}} {
+                1+\\frac{e^{-6\\pi}}
+                {1+\\frac{e^{-8\\pi}}{1+\\cdots}}
+              }
+            }
+            $$
+
+            或者$a^2 + b^2 = \\color{red}c^2$
+            """);
+
+        assertThat(html)
+            .contains("<div class=\"language-math\">")
+            .contains("\\Bigl(\\sqrt{\\phi \\sqrt{5}}-\\phi\\Bigr)")
+            .contains("<span class=\"language-math\">a^2 + b^2 = \\color{red}c^2</span>");
+    }
 }

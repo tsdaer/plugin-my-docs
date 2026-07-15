@@ -14,10 +14,6 @@ import run.halo.app.plugin.ReactiveSettingFetcher;
 public class DocIndexSettingsService {
 
     static final String BASIC_GROUP = "basic";
-    private static final Set<String> CONTENT_THEMES =
-        Set.of("light", "dark", "wechat", "ant-design", "custom");
-    private static final Set<String> LEGACY_CONTENT_THEMES =
-        Set.of("light", "dark", "wechat", "ant-design");
     private static final Pattern CSS_CLASS_PATTERN =
         Pattern.compile("^[A-Za-z_][A-Za-z0-9_-]*$");
     private static final Pattern CODE_THEME_PATTERN = Pattern.compile("^[a-z0-9-]{1,100}$");
@@ -48,21 +44,9 @@ public class DocIndexSettingsService {
         normalized.setLibraryIndexPlacements(normalizePlacements(settings.getLibraryIndexPlacements()));
         normalized.setLibraryIndexFolderTitles(
             normalizeFolderTitles(settings.getLibraryIndexFolderTitles()));
-        String legacyContentTheme = StringUtils.hasText(settings.getRenderContentTheme())
-            && LEGACY_CONTENT_THEMES.contains(settings.getRenderContentTheme())
-            ? settings.getRenderContentTheme() : null;
         String legacyCodeTheme = normalizeCodeTheme(settings.getRenderCodeTheme(), "");
-        String lightTheme = normalizeContentTheme(settings.getRenderContentThemeLight(),
-            legacyContentTheme == null ? "light" : legacyContentTheme);
-        String darkTheme = normalizeContentTheme(settings.getRenderContentThemeDark(),
-            "light".equals(legacyContentTheme) ? "dark"
-                : legacyContentTheme == null ? "dark" : legacyContentTheme);
         String lightUrl = normalizeThemeUrl(settings.getRenderContentThemeLightUrl());
         String darkUrl = normalizeThemeUrl(settings.getRenderContentThemeDarkUrl());
-        normalized.setRenderContentThemeLight(
-            "custom".equals(lightTheme) && !StringUtils.hasText(lightUrl) ? "light" : lightTheme);
-        normalized.setRenderContentThemeDark(
-            "custom".equals(darkTheme) && !StringUtils.hasText(darkUrl) ? "dark" : darkTheme);
         normalized.setRenderContentThemeLightUrl(lightUrl);
         normalized.setRenderContentThemeDarkUrl(darkUrl);
         normalized.setRenderContentThemeLightClass(
@@ -213,12 +197,6 @@ public class DocIndexSettingsService {
         return value == null ? "" : value;
     }
 
-    private static String normalizeContentTheme(String value, String fallback) {
-        String normalized = StringUtils.trimWhitespace(value);
-        return StringUtils.hasText(normalized) && CONTENT_THEMES.contains(normalized)
-            ? normalized : fallback;
-    }
-
     private static String normalizeThemeUrl(String value) {
         String normalized = StringUtils.trimWhitespace(value);
         if (!StringUtils.hasText(normalized)) {
@@ -260,8 +238,6 @@ public class DocIndexSettingsService {
 
     private static DocIndexSettings defaultSettings() {
         var settings = new DocIndexSettings();
-        settings.setRenderContentThemeLight("light");
-        settings.setRenderContentThemeDark("dark");
         settings.setRenderContentThemeLightUrl("");
         settings.setRenderContentThemeDarkUrl("");
         settings.setRenderContentThemeLightClass("markdown-body");

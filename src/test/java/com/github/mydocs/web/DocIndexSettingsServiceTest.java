@@ -13,29 +13,25 @@ import run.halo.app.plugin.ReactiveSettingFetcher;
 class DocIndexSettingsServiceTest {
 
     @Test
-    void migratesLegacyLightAndGithubThemes() {
+    void migratesLegacyGithubCodeTheme() {
         var legacy = new DocIndexSettings();
         legacy.setRenderContentTheme("light");
         legacy.setRenderCodeTheme("github");
 
         var settings = service(legacy).fetch().block();
 
-        assertThat(settings.getRenderContentThemeLight()).isEqualTo("light");
-        assertThat(settings.getRenderContentThemeDark()).isEqualTo("dark");
         assertThat(settings.getRenderCodeThemeLight()).isEqualTo("github");
         assertThat(settings.getRenderCodeThemeDark()).isEqualTo("github-dark");
     }
 
     @Test
-    void keepsNonDefaultLegacyThemesOnBothSchemes() {
+    void keepsNonDefaultLegacyCodeThemeOnBothSchemes() {
         var legacy = new DocIndexSettings();
         legacy.setRenderContentTheme("wechat");
         legacy.setRenderCodeTheme("monokai");
 
         var settings = service(legacy).fetch().block();
 
-        assertThat(settings.getRenderContentThemeLight()).isEqualTo("wechat");
-        assertThat(settings.getRenderContentThemeDark()).isEqualTo("wechat");
         assertThat(settings.getRenderCodeThemeLight()).isEqualTo("monokai");
         assertThat(settings.getRenderCodeThemeDark()).isEqualTo("monokai");
     }
@@ -43,21 +39,17 @@ class DocIndexSettingsServiceTest {
     @Test
     void validatesCustomThemeUrlsAndClasses() {
         var source = new DocIndexSettings();
-        source.setRenderContentThemeLight("custom");
         source.setRenderContentThemeLightUrl("https://cdn.example.com/light.css");
         source.setRenderContentThemeLightClass("markdown-body custom_light markdown-body");
-        source.setRenderContentThemeDark("custom");
         source.setRenderContentThemeDarkUrl("javascript:alert(1)");
         source.setRenderContentThemeDarkClass("bad.class");
 
         var settings = service(source).fetch().block();
 
-        assertThat(settings.getRenderContentThemeLight()).isEqualTo("custom");
         assertThat(settings.getRenderContentThemeLightUrl())
             .isEqualTo("https://cdn.example.com/light.css");
         assertThat(settings.getRenderContentThemeLightClass())
             .isEqualTo("markdown-body custom_light");
-        assertThat(settings.getRenderContentThemeDark()).isEqualTo("dark");
         assertThat(settings.getRenderContentThemeDarkUrl()).isEmpty();
         assertThat(settings.getRenderContentThemeDarkClass()).isEqualTo("markdown-body");
     }

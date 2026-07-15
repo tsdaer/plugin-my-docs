@@ -2,9 +2,6 @@ export const MY_DOCS_CONFIG_MAP_NAME = 'my-docs-configmap'
 export const MY_DOCS_CONFIG_GROUP = 'basic'
 
 export type DocSort = 'priorityAsc' | 'createdDesc' | 'titleAsc'
-export type BuiltInDocContentTheme = 'light' | 'dark' | 'wechat' | 'ant-design'
-export type DocContentTheme = BuiltInDocContentTheme | 'custom'
-
 export interface LibraryPageLayoutSetting {
   page: number
   maxRows: number
@@ -37,8 +34,6 @@ export interface MyDocsSettings {
   libraryIndexRowLayouts: LibraryRowLayoutSetting[]
   libraryIndexPlacements: LibraryPlacementSetting[]
   libraryIndexFolderTitles: LibraryFolderTitleSetting[]
-  renderContentThemeLight: DocContentTheme
-  renderContentThemeDark: DocContentTheme
   renderContentThemeLightUrl: string
   renderContentThemeDarkUrl: string
   renderContentThemeLightClass: string
@@ -67,8 +62,6 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   libraryIndexRowLayouts: [],
   libraryIndexPlacements: [],
   libraryIndexFolderTitles: [],
-  renderContentThemeLight: 'light',
-  renderContentThemeDark: 'dark',
   renderContentThemeLightUrl: '',
   renderContentThemeDarkUrl: '',
   renderContentThemeLightClass: 'markdown-body',
@@ -98,13 +91,6 @@ function cloneDefaultSettings(): MyDocsSettings {
   }
 }
 
-const contentThemes = new Set<DocContentTheme>(['light', 'dark', 'wechat', 'ant-design', 'custom'])
-const legacyContentThemes = new Set<BuiltInDocContentTheme>([
-  'light',
-  'dark',
-  'wechat',
-  'ant-design',
-])
 const docSorts = new Set<DocSort>(['priorityAsc', 'createdDesc', 'titleAsc'])
 const cssClassPattern = /^[A-Za-z_][A-Za-z0-9_-]*$/
 
@@ -138,10 +124,6 @@ function normalizeThemeClass(value: unknown): string {
     return 'markdown-body'
   }
   return Array.from(new Set(classes)).join(' ')
-}
-
-function readContentTheme(value: unknown, fallback: DocContentTheme): DocContentTheme {
-  return contentThemes.has(value as DocContentTheme) ? (value as DocContentTheme) : fallback
 }
 
 function normalizePositiveInt(value: unknown, fallback: number, max = 24): number {
@@ -270,29 +252,11 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<MyDocsSettings> & {
-      renderContentTheme?: BuiltInDocContentTheme
-      renderCodeTheme?: string
-    }
+    const parsed = JSON.parse(raw) as Partial<MyDocsSettings> & { renderCodeTheme?: string }
     const defaultSort = docSorts.has(parsed.defaultSort as DocSort)
       ? (parsed.defaultSort as DocSort)
       : defaultMyDocsSettings.defaultSort
-    const legacyContentTheme = legacyContentThemes.has(
-      parsed.renderContentTheme as BuiltInDocContentTheme,
-    )
-      ? (parsed.renderContentTheme as BuiltInDocContentTheme)
-      : undefined
     const legacyCodeTheme = readString(parsed.renderCodeTheme, '').trim()
-    const renderContentThemeLight = readContentTheme(
-      parsed.renderContentThemeLight,
-      legacyContentTheme ?? defaultMyDocsSettings.renderContentThemeLight,
-    )
-    const renderContentThemeDark = readContentTheme(
-      parsed.renderContentThemeDark,
-      legacyContentTheme === 'light'
-        ? 'dark'
-        : (legacyContentTheme ?? defaultMyDocsSettings.renderContentThemeDark),
-    )
     const renderContentThemeLightUrl = normalizeThemeUrl(parsed.renderContentThemeLightUrl)
     const renderContentThemeDarkUrl = normalizeThemeUrl(parsed.renderContentThemeDarkUrl)
 
@@ -316,14 +280,6 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
       libraryIndexRowLayouts: readRowLayouts(parsed.libraryIndexRowLayouts),
       libraryIndexPlacements: readPlacements(parsed.libraryIndexPlacements),
       libraryIndexFolderTitles: readFolderTitles(parsed.libraryIndexFolderTitles),
-      renderContentThemeLight:
-        renderContentThemeLight === 'custom' && !renderContentThemeLightUrl
-          ? defaultMyDocsSettings.renderContentThemeLight
-          : renderContentThemeLight,
-      renderContentThemeDark:
-        renderContentThemeDark === 'custom' && !renderContentThemeDarkUrl
-          ? defaultMyDocsSettings.renderContentThemeDark
-          : renderContentThemeDark,
       renderContentThemeLightUrl,
       renderContentThemeDarkUrl,
       renderContentThemeLightClass: normalizeThemeClass(parsed.renderContentThemeLightClass),

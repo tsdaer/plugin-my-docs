@@ -11,6 +11,8 @@
   <meta property="og:image" th:if="${!#strings.isEmpty(seo.image)}" th:content="${seo.image}">
   <th:block th:replace="~{plugin:my-docs:docs/modules/theme :: theme}"></th:block>
   <th:block th:if="${!#strings.isEmpty(mdocsCustomHeadHtml)}" th:utext="${mdocsCustomHeadHtml}"></th:block>
+  <link id="ratex-wasm-fonts" rel="stylesheet" href="/plugins/my-docs/assets/static/ratex/fonts.css"
+        th:if="${detailContent.renderSettings.renderMathBlockPreview}">
   <style>
     html { scroll-behavior: smooth; }
     body { margin: 0; color: var(--mdocs-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--mdocs-bg); transition: background-color .2s ease, color .2s ease; }
@@ -42,6 +44,9 @@
     .mdocs-content img { max-width: 100%; height: auto; }
     .mdocs-content pre { max-width: 100%; overflow-x: auto; }
     .mdocs-content .mdocs-indent-2 { text-indent: 2em; }
+    .mdocs-content .mdocs-ratex { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+    .mdocs-content .mdocs-ratex--inline { display: inline-block; padding: 0 .08em; vertical-align: -.35em; }
+    .mdocs-content .mdocs-ratex--block { display: block; margin: 1em 0; text-align: center; }
     .mdocs-content.mdocs-theme-fallback { color: var(--mdocs-text); font-size: 16px; line-height: 1.8; }
     .mdocs-content.mdocs-theme-fallback a { color: var(--mdocs-accent); }
     .mdocs-content.mdocs-theme-fallback pre { padding: 16px; border-radius: 8px; background: var(--mdocs-code-bg); color: var(--mdocs-code-text); }
@@ -88,7 +93,7 @@
     </aside>
   </main>
   <th:block th:replace="~{plugin:my-docs:docs/modules/collapse :: collapse}"></th:block>
-  <script src="/plugins/my-docs/assets/vditor/dist/method.min.js"></script>
+  <script src="/plugins/my-docs/assets/static/vditor/dist/method.min.js"></script>
   <script th:inline="javascript">
     (function () {
       var content = document.getElementById('mdocs-content');
@@ -97,8 +102,6 @@
       }
 
       var settings = {
-        contentThemeLight: /*[[${detailContent.renderSettings.renderContentThemeLight}]]*/ 'light',
-        contentThemeDark: /*[[${detailContent.renderSettings.renderContentThemeDark}]]*/ 'dark',
         contentThemeLightUrl: /*[[${detailContent.renderSettings.renderContentThemeLightUrl}]]*/ '',
         contentThemeDarkUrl: /*[[${detailContent.renderSettings.renderContentThemeDarkUrl}]]*/ '',
         contentThemeLightClass: /*[[${detailContent.renderSettings.renderContentThemeLightClass}]]*/ 'markdown-body',
@@ -109,9 +112,13 @@
         codeBlockPreview: /*[[${detailContent.renderSettings.renderCodeBlockPreview}]]*/ true,
         mathBlockPreview: /*[[${detailContent.renderSettings.renderMathBlockPreview}]]*/ true,
       };
-      var cdn = '/plugins/my-docs/assets/vditor';
+      var cdn = '/plugins/my-docs/assets/static/vditor';
+      var ratexBase = '/plugins/my-docs/assets/static/ratex';
       var managedClasses = [];
       var loadedThemeHref = '';
+      var mathColorRefreshFrame;
+      var mathColorRefreshFollowUpFrame;
+      var mathColorRefreshTimer;
       var themeLink = document.createElement('link');
       var baseLink = document.createElement('link');
       themeLink.rel = 'stylesheet';
@@ -141,31 +148,27 @@
 
       function applyTheme(scheme) {
         var suffix = scheme === 'dark' ? 'Dark' : 'Light';
-        var contentTheme = settings['contentTheme' + suffix];
         var customUrl = settings['contentTheme' + suffix + 'Url'];
         var customClass = settings['contentTheme' + suffix + 'Class'];
         var codeTheme = settings['codeTheme' + suffix];
-        var builtIn = contentTheme !== 'custom';
 
         clearManagedClasses();
         content.classList.add('mdocs-theme-fallback');
-        var nextThemeHref;
-        if (builtIn) {
-          addManagedClasses('vditor-reset');
-          nextThemeHref = cdn + '/dist/css/content-theme/' + contentTheme + '.css';
-        } else {
-          addManagedClasses(customClass);
-          nextThemeHref = customUrl;
-        }
+        addManagedClasses(customClass);
+        var nextThemeHref = customUrl;
         themeLink.onload = function () {
           loadedThemeHref = nextThemeHref;
           content.classList.remove('mdocs-theme-fallback');
+          scheduleMathColorRefresh();
         };
         themeLink.onerror = function () {
           loadedThemeHref = '';
           content.classList.add('mdocs-theme-fallback');
         };
-        if (loadedThemeHref === nextThemeHref) {
+        if (!nextThemeHref) {
+          loadedThemeHref = '';
+          themeLink.removeAttribute('href');
+        } else if (loadedThemeHref === nextThemeHref) {
           content.classList.remove('mdocs-theme-fallback');
         } else {
           themeLink.href = nextThemeHref;
@@ -174,40 +177,169 @@
         if (window.Vditor) {
           window.Vditor.setCodeTheme(codeTheme, cdn);
         }
+        scheduleMathColorRefresh();
+      }
+
+      function colorToHex(value, scheme) {
+        var normalized = String(value || '').trim();
+        if (/^#[0-9a-f]{3,8}$/i.test(normalized)) {
+          return normalized;
+        }
+        var match = normalized.match(/^rgba?\(\s*(\d+)\D+(\d+)\D+(\d+)(?:\D+([\d.]+))?\s*\)$/i);
+        if (!match) {
+          return scheme === 'dark' ? '#e5edf7' : '#1f2937';
+        }
+        var parts = [match[1], match[2], match[3]].map(function (part) {
+          return Math.max(0, Math.min(255, Number(part))).toString(16).padStart(2, '0');
+        });
+        if (match[4] !== undefined && Number(match[4]) < 1) {
+          parts.push(Math.round(Math.max(0, Math.min(1, Number(match[4]))) * 255)
+            .toString(16).padStart(2, '0'));
+        }
+        return '#' + parts.join('');
+      }
+
+      function currentMathColor(scheme) {
+        var effectiveScheme = scheme === 'dark' ? 'dark' : 'light';
+        var contentColor = window.getComputedStyle(content).color;
+        var rootStyle = window.getComputedStyle(document.documentElement);
+        var themeColor = rootStyle.getPropertyValue('--mdocs-text').trim();
+        return colorToHex(contentColor || themeColor, effectiveScheme);
+      }
+
+      function refreshMathColor() {
+        var color = currentMathColor(currentScheme());
+        content.querySelectorAll('ratex-formula.mdocs-ratex').forEach(function (formula) {
+          formula.setAttribute('color', color);
+        });
+      }
+
+      function scheduleMathColorRefresh() {
+        refreshMathColor();
+        window.cancelAnimationFrame(mathColorRefreshFrame);
+        window.cancelAnimationFrame(mathColorRefreshFollowUpFrame);
+        mathColorRefreshFrame = window.requestAnimationFrame(function () {
+          refreshMathColor();
+          mathColorRefreshFollowUpFrame = window.requestAnimationFrame(function () {
+            refreshMathColor();
+          });
+        });
+        window.clearTimeout(mathColorRefreshTimer);
+        mathColorRefreshTimer = window.setTimeout(function () {
+          refreshMathColor();
+        }, 250);
+      }
+
+      function loadRatexFonts() {
+        if (!document.fonts || typeof document.fonts.load !== 'function') {
+          return Promise.resolve();
+        }
+        var fontFaces = [
+          '18px KaTeX_AMS',
+          '18px KaTeX_Caligraphic',
+          '18px KaTeX_Fraktur',
+          'bold 18px KaTeX_Fraktur',
+          '18px KaTeX_Main',
+          'bold 18px KaTeX_Main',
+          'italic 18px KaTeX_Main',
+          'italic bold 18px KaTeX_Main',
+          'italic 18px KaTeX_Math',
+          'italic bold 18px KaTeX_Math',
+          '18px KaTeX_SansSerif',
+          'bold 18px KaTeX_SansSerif',
+          'italic 18px KaTeX_SansSerif',
+          '18px KaTeX_Script',
+          '18px KaTeX_Size1',
+          '18px KaTeX_Size2',
+          '18px KaTeX_Size3',
+          '18px KaTeX_Size4',
+          '18px KaTeX_Typewriter',
+        ];
+        return Promise.all(fontFaces.map(function (fontFace) {
+          return document.fonts.load(fontFace);
+        })).then(function () {});
+      }
+
+      function fallbackMathRender() {
+        if (window.Vditor && content.querySelector('.language-math')) {
+          window.Vditor.mathRender(content, { cdn: cdn });
+        }
+      }
+
+      function renderMathWithRatex() {
+        var mathNodes = Array.prototype.slice.call(content.querySelectorAll('.language-math'));
+        if (mathNodes.length === 0) {
+          return Promise.resolve();
+        }
+        var ratexModule;
+        return Promise.all([loadRatexFonts(), import(ratexBase + '/dist/index.js')])
+          .then(function (results) {
+            ratexModule = results[1];
+            return ratexModule.initRatex();
+          })
+          .then(function () {
+            return import(ratexBase + '/dist/ratex-formula.js');
+          })
+          .then(function () {
+            var color = currentMathColor(currentScheme());
+            mathNodes.forEach(function (node) {
+              var latex = String(node.textContent || '').trim();
+              if (!latex) {
+                return;
+              }
+              try {
+                ratexModule.renderLatexToDisplayList(latex, color);
+                var block = node.tagName === 'DIV';
+                var formula = document.createElement('ratex-formula');
+                formula.className = 'mdocs-ratex ' + (block
+                  ? 'mdocs-ratex--block' : 'mdocs-ratex--inline');
+                formula.setAttribute('latex', latex);
+                formula.setAttribute('font-size', block ? '22' : '18');
+                formula.setAttribute('padding', block ? '8' : '1');
+                formula.setAttribute('background-color', 'transparent');
+                formula.setAttribute('color', color);
+                formula.setAttribute('role', 'math');
+                formula.setAttribute('aria-label', latex);
+                node.replaceWith(formula);
+              } catch (error) {
+                console.warn('[my-docs] RaTeX formula rendering failed.', error);
+              }
+            });
+            fallbackMathRender();
+          })
+          .catch(function (error) {
+            console.warn('[my-docs] RaTeX initialization failed; falling back to Vditor.', error);
+            fallbackMathRender();
+          });
       }
 
       function enhanceContent() {
-        if (!window.Vditor) {
-          return;
-        }
         var scheme = currentScheme();
         var suffix = scheme === 'dark' ? 'Dark' : 'Light';
         var codeTheme = settings['codeTheme' + suffix];
         var highlightOptions = { style: codeTheme, lineNumber: settings.lineNumber };
-        window.Vditor.highlightRender(highlightOptions, content, cdn);
-        window.Vditor.codeRender(content, highlightOptions);
-        if (settings.mathBlockPreview) {
-          window.Vditor.mathRender(content, { cdn: cdn });
+        if (window.Vditor) {
+          window.Vditor.highlightRender(highlightOptions, content, cdn);
+          window.Vditor.codeRender(content, highlightOptions);
+          if (settings.codeBlockPreview) {
+            window.Vditor.mermaidRender(content, cdn, scheme);
+            window.Vditor.flowchartRender(content, cdn);
+            window.Vditor.graphvizRender(content, cdn);
+            window.Vditor.chartRender(content, cdn, scheme);
+            window.Vditor.mindmapRender(content, cdn, scheme);
+            window.Vditor.markmapRender(content, cdn);
+            window.Vditor.plantumlRender(content, cdn);
+            window.Vditor.abcRender(content, cdn);
+            window.Vditor.SMILESRender(content, cdn, scheme);
+          }
         }
-        if (settings.codeBlockPreview) {
-          window.Vditor.mermaidRender(content, cdn, scheme);
-          window.Vditor.flowchartRender(content, cdn);
-          window.Vditor.graphvizRender(content, cdn);
-          window.Vditor.chartRender(content, cdn, scheme);
-          window.Vditor.mindmapRender(content, cdn, scheme);
-          window.Vditor.markmapRender(content, cdn);
-          window.Vditor.plantumlRender(content, cdn);
-          window.Vditor.abcRender(content, cdn);
-          window.Vditor.SMILESRender(content, cdn, scheme);
-        }
+        return settings.mathBlockPreview ? renderMathWithRatex() : Promise.resolve();
       }
 
       applyTheme(currentScheme());
-      try {
-        enhanceContent();
-      } catch (error) {
+      Promise.resolve().then(enhanceContent).catch(function (error) {
         console.warn('[my-docs] Frontend markdown enhancement failed.', error);
-      }
+      });
       window.addEventListener('mdocs:scheme-change', function (event) {
         applyTheme(event.detail && event.detail.scheme === 'dark' ? 'dark' : 'light');
       });

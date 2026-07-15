@@ -26,6 +26,9 @@ importers:
       canvas-confetti:
         specifier: ^1.9.3
         version: 1.9.4
+      ratex-wasm:
+        specifier: 0.1.13
+        version: 0.1.13
       vditor:
         specifier: ^3.11.1
         version: 3.11.2
@@ -1925,6 +1928,9 @@ packages:
 
   queue-microtask@1.2.3:
     resolution: {integrity: sha512-NuaNSa6flKT5JaSYQzJok04JzTL1CA6aGhv5rfLW3PgqA+M2ChpZQnAC8h8i4ZFkBS8X5RqkDBHA7r4hej3K9A==}
+
+  ratex-wasm@0.1.13:
+    resolution: {integrity: sha512-awHBCOv53XLgQHL3nI6Dqps3UclmTPx1KR7sNG3MJEolhUh28XUaTjAjqsm2JhU67RYKIT3QilWKZtAKu299SQ==}
 
   read-package-json-fast@4.0.0:
     resolution: {integrity: sha512-qpt8EwugBWDw2cgE2W+/3oxC+KTez2uSVR8JU9Q36TXPAGCaozfQUs59v4j4GFpWTaw0i6hAZSvOmu1J0uOEUg==}
@@ -4361,6 +4367,8 @@ snapshots:
   quansync@0.2.11: {}
 
   queue-microtask@1.2.3: {}
+
+  ratex-wasm@0.1.13: {}
 
   read-package-json-fast@4.0.0:
     dependencies:

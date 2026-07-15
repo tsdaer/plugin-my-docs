@@ -64,9 +64,32 @@ tasks.register('processVditorResources', Copy) {
     shouldRunAfter tasks.named('processResources')
 }
 
+tasks.register('processRatexResources', Copy) {
+    doFirst {
+        delete layout.buildDirectory.dir('resources/main/static/ratex')
+    }
+    from(project(':ui').layout.projectDirectory.dir('node_modules/ratex-wasm/dist')) {
+        into 'dist'
+    }
+    from(project(':ui').layout.projectDirectory.dir('node_modules/ratex-wasm/pkg')) {
+        into 'pkg'
+    }
+    from(project(':ui').layout.projectDirectory.dir('node_modules/ratex-wasm/fonts')) {
+        include '*.woff'
+        include '*.woff2'
+        into 'fonts'
+    }
+    from project(':ui').layout.projectDirectory.file('node_modules/ratex-wasm/fonts.css')
+    from project(':ui').layout.projectDirectory.file('node_modules/ratex-wasm/LICENSE')
+    into layout.buildDirectory.dir('resources/main/static/ratex')
+    dependsOn project(':ui').tasks.named('pnpmInstall')
+    shouldRunAfter tasks.named('processResources')
+}
+
 tasks.named('classes') {
     dependsOn tasks.named('processUiResources')
     dependsOn tasks.named('processVditorResources')
+    dependsOn tasks.named('processRatexResources')
 }
 
 tasks.named('generatePluginComponentsIdx') {

@@ -32,49 +32,19 @@ spec:
           label: 文档库首页默认每页最大行数
           value: 2
           validation: required|min:1|max:24
-        - $formkit: select
-          name: renderContentThemeLight
-          label: 浅色内容主题
-          value: light
-          options:
-            - label: Light
-              value: light
-            - label: Dark
-              value: dark
-            - label: WeChat
-              value: wechat
-            - label: Ant Design
-              value: ant-design
-            - label: 自定义 CSS
-              value: custom
         - $formkit: text
           name: renderContentThemeLightUrl
           label: 浅色主题 CSS 地址
-          help: "自定义主题时填写，仅支持 https:// 或 / 开头的站内绝对路径。"
+          help: "可选，仅支持 https:// 或 / 开头的站内绝对路径；留空时使用基础回退样式。"
           value: ""
         - $formkit: text
           name: renderContentThemeLightClass
           label: 浅色正文容器 class
           value: markdown-body
-        - $formkit: select
-          name: renderContentThemeDark
-          label: 深色内容主题
-          value: dark
-          options:
-            - label: Light
-              value: light
-            - label: Dark
-              value: dark
-            - label: WeChat
-              value: wechat
-            - label: Ant Design
-              value: ant-design
-            - label: 自定义 CSS
-              value: custom
         - $formkit: text
           name: renderContentThemeDarkUrl
           label: 深色主题 CSS 地址
-          help: "自定义主题时填写，仅支持 https:// 或 / 开头的站内绝对路径。"
+          help: "可选，仅支持 https:// 或 / 开头的站内绝对路径；留空时使用基础回退样式。"
           value: ""
         - $formkit: text
           name: renderContentThemeDarkClass
@@ -131,7 +101,7 @@ spec:
         - $formkit: switch
           name: renderMathBlockPreview
           label: 数学公式渲染
-          help: 使用 KaTeX 渲染 $...$ 与 $$...$$ 公式。
+          help: 使用 RaTeX（WASM + Canvas）渲染 $...$ 与 $$...$$ 公式，失败时回退到 Vditor。
           value: true
         - $formkit: textarea
           name: customHeadHtml

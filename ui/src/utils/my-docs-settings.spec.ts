@@ -28,8 +28,8 @@ describe('my-docs settings', () => {
           libraryIndexFolderTitles: [
             { row: 2, column: 3, title: '入门合集', description: '集中展示新手文档库' },
           ],
-          renderContentThemeLight: 'wechat',
-          renderContentThemeDark: 'dark',
+          renderContentThemeLightUrl: 'https://cdn.example.com/light.css',
+          renderContentThemeDarkUrl: '/themes/dark.css',
           renderLineNumber: true,
           renderAutoSpace: true,
         }),
@@ -50,8 +50,8 @@ describe('my-docs settings', () => {
       libraryIndexFolderTitles: [
         { row: 2, column: 3, title: '入门合集', description: '集中展示新手文档库' },
       ],
-      renderContentThemeLight: 'wechat',
-      renderContentThemeDark: 'dark',
+      renderContentThemeLightUrl: 'https://cdn.example.com/light.css',
+      renderContentThemeDarkUrl: '/themes/dark.css',
       renderLineNumber: true,
       renderAutoSpace: true,
     })
@@ -98,8 +98,7 @@ describe('my-docs settings', () => {
   it('stringifies settings for config map storage', () => {
     const raw = stringifyMyDocsSettings({
       ...defaultMyDocsSettings,
-      renderContentThemeLight: 'wechat',
-      renderContentThemeDark: 'custom',
+      renderContentThemeLightUrl: 'https://cdn.example.com/light.css',
       renderContentThemeDarkUrl: 'https://cdn.example.com/dark.css',
       renderContentThemeDarkClass: 'markdown-body theme-dark',
       renderCodeThemeLight: 'github',
@@ -107,22 +106,19 @@ describe('my-docs settings', () => {
     })
 
     expect(JSON.parse(raw)).toMatchObject({
-      renderContentThemeLight: 'wechat',
-      renderContentThemeDark: 'custom',
+      renderContentThemeLightUrl: 'https://cdn.example.com/light.css',
       renderContentThemeDarkUrl: 'https://cdn.example.com/dark.css',
       renderContentThemeDarkClass: 'markdown-body theme-dark',
       renderCodeThemeDark: 'monokai',
     })
   })
 
-  it('migrates legacy single themes to light and dark settings', () => {
+  it('migrates legacy single code themes to light and dark settings', () => {
     expect(
       parseMyDocsSettings(
         JSON.stringify({ renderContentTheme: 'light', renderCodeTheme: 'github' }),
       ),
     ).toMatchObject({
-      renderContentThemeLight: 'light',
-      renderContentThemeDark: 'dark',
       renderCodeThemeLight: 'github',
       renderCodeThemeDark: 'github-dark',
     })
@@ -132,8 +128,6 @@ describe('my-docs settings', () => {
         JSON.stringify({ renderContentTheme: 'wechat', renderCodeTheme: 'monokai' }),
       ),
     ).toMatchObject({
-      renderContentThemeLight: 'wechat',
-      renderContentThemeDark: 'wechat',
       renderCodeThemeLight: 'monokai',
       renderCodeThemeDark: 'monokai',
     })
@@ -143,13 +137,11 @@ describe('my-docs settings', () => {
     expect(
       parseMyDocsSettings(
         JSON.stringify({
-          renderContentThemeLight: 'custom',
           renderContentThemeLightUrl: 'javascript:alert(1)',
           renderContentThemeLightClass: 'valid bad.class',
         }),
       ),
     ).toMatchObject({
-      renderContentThemeLight: 'light',
       renderContentThemeLightUrl: '',
       renderContentThemeLightClass: 'markdown-body',
     })
