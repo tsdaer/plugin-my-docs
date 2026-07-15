@@ -19,6 +19,45 @@ public class DocIndexSettings {
 
     private List<LibraryFolderTitle> libraryIndexFolderTitles = new ArrayList<>();
 
+    private String renderContentThemeLight;
+
+    private String renderContentThemeDark;
+
+    private String renderContentThemeLightUrl;
+
+    private String renderContentThemeDarkUrl;
+
+    private String renderContentThemeLightClass;
+
+    private String renderContentThemeDarkClass;
+
+    private String renderCodeThemeLight;
+
+    private String renderCodeThemeDark;
+
+    private Boolean renderLineNumber = false;
+
+    private Boolean renderAutoSpace = false;
+
+    private Boolean renderGfmAutoLink = true;
+
+    private Boolean renderFootnotes = true;
+
+    private Boolean renderMark = false;
+
+    private Boolean renderFixTermTypo = false;
+
+    private Boolean renderParagraphBeginningSpace = false;
+
+    private Boolean renderCodeBlockPreview = true;
+
+    private Boolean renderMathBlockPreview = true;
+
+    // 仅用于读取旧版 ConfigMap，规范化后不再写入模板模型。
+    private String renderContentTheme;
+
+    private String renderCodeTheme;
+
     private String customHeadHtml = "";
 
     private String customBodyHtml = "";

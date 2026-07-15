@@ -21,6 +21,7 @@ dependencies {
     implementation 'org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0'
     implementation 'org.commonmark:commonmark-ext-autolink:0.24.0'
     implementation 'org.commonmark:commonmark-ext-heading-anchor:0.24.0'
+    implementation 'org.commonmark:commonmark-ext-footnotes:0.24.0'
 
     testImplementation 'run.halo.app:api'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -53,8 +54,19 @@ tasks.register('processUiResources', Copy) {
     shouldRunAfter tasks.named('processResources')
 }
 
+tasks.register('processVditorResources', Copy) {
+    doFirst {
+        delete layout.buildDirectory.dir('resources/main/static/vditor')
+    }
+    from project(':ui').layout.projectDirectory.dir('node_modules/vditor/dist')
+    into layout.buildDirectory.dir('resources/main/static/vditor/dist')
+    dependsOn project(':ui').tasks.named('pnpmInstall')
+    shouldRunAfter tasks.named('processResources')
+}
+
 tasks.named('classes') {
     dependsOn tasks.named('processUiResources')
+    dependsOn tasks.named('processVditorResources')
 }
 
 tasks.named('generatePluginComponentsIdx') {
@@ -93,4 +105,3 @@ haloPlugin {
         }
     }
 }
-

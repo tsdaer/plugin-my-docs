@@ -3,6 +3,7 @@ package com.github.mydocs.web;
 import com.github.mydocs.extension.Doc;
 import com.github.mydocs.extension.DocLibrary;
 import com.github.mydocs.extensionpoint.DocContentHandlerChain;
+import com.github.mydocs.service.MarkdownRenderer;
 import java.net.URI;
 import java.util.List;
 import lombok.Value;
@@ -22,25 +23,42 @@ import reactor.core.publisher.Mono;
 public class DocDetailContentBuilder {
 
     private final DocContentHandlerChain contentHandlerChain;
+    private final MarkdownRenderer markdownRenderer;
+    private final DocIndexSettingsService settingsService;
 
-    public DocDetailContentBuilder(DocContentHandlerChain contentHandlerChain) {
+    public DocDetailContentBuilder(DocContentHandlerChain contentHandlerChain,
+        MarkdownRenderer markdownRenderer, DocIndexSettingsService settingsService) {
         this.contentHandlerChain = contentHandlerChain;
+        this.markdownRenderer = markdownRenderer;
+        this.settingsService = settingsService;
     }
 
     public Mono<DetailContent> build(DocLibrary library, Doc doc) {
-        var content = spec(doc).getContent();
-        if (!StringUtils.hasText(content)) {
-            return Mono.just(new DetailContent("", List.of()));
-        }
+        return settingsService.fetch().flatMap(settings -> {
+            var docSpec = spec(doc);
+            String content;
+            if (StringUtils.hasText(docSpec.getRaw())
+                && !"html".equalsIgnoreCase(docSpec.getRawType())) {
+                content = markdownRenderer.render(docSpec.getRaw(),
+                    MarkdownRenderer.RenderOptions.from(settings));
+            } else {
+                content = markdownRenderer.enhanceHtml(docSpec.getContent(),
+                    MarkdownRenderer.RenderOptions.from(settings));
+            }
+            if (!StringUtils.hasText(content)) {
+                return Mono.just(new DetailContent("", List.of(), settings));
+            }
 
-        var librarySlug = library == null || library.getSpec() == null
-            ? null : library.getSpec().getSlug();
-        return contentHandlerChain.handle(content, doc, library)
-            .map(handledContent -> {
-                Document document = Jsoup.parseBodyFragment(handledContent);
-                rewriteSameLibraryLinks(document.body(), librarySlug);
-                return new DetailContent(document.body().html(), extractOutline(document.body()));
-            });
+            var librarySlug = library == null || library.getSpec() == null
+                ? null : library.getSpec().getSlug();
+            return contentHandlerChain.handle(content, doc, library)
+                .map(handledContent -> {
+                    Document document = Jsoup.parseBodyFragment(handledContent);
+                    rewriteSameLibraryLinks(document.body(), librarySlug);
+                    return new DetailContent(document.body().html(),
+                        extractOutline(document.body()), settings);
+                });
+        });
     }
 
     private void rewriteSameLibraryLinks(Element root, String librarySlug) {
@@ -129,6 +147,7 @@ public class DocDetailContentBuilder {
     public static class DetailContent {
         String html;
         List<OutlineHeading> outline;
+        DocIndexSettings renderSettings;
     }
 
     @Value

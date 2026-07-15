@@ -64,4 +64,41 @@ class MarkdownRendererTest {
         assertThat(renderer.render(null)).isEmpty();
         assertThat(renderer.render("   ")).isEmpty();
     }
+
+    @Test
+    void appliesOptionalMarkdownSyntaxSettings() {
+        var enabled = new MarkdownRenderer.RenderOptions(false, true, true, true, false, false);
+        String html = renderer.render("Visit https://example.com and ==mark==.\n\n[^1]: note\n\nref[^1]",
+            enabled);
+
+        assertThat(html)
+            .contains("href=\"https://example.com\"")
+            .contains("<mark>mark</mark>")
+            .contains("footnote");
+
+        var disabled = new MarkdownRenderer.RenderOptions(false, false, false, false, false, false);
+        String plain = renderer.render("Visit https://example.com and ==mark==.", disabled);
+        assertThat(plain)
+            .doesNotContain("href=\"https://example.com\"")
+            .contains("==mark==");
+    }
+
+    @Test
+    void appliesTypographyWithoutChangingCode() {
+        var options = new MarkdownRenderer.RenderOptions(true, true, true, false, true, true);
+        String html = renderer.render("中文github测试\n\n`github中文`", options);
+
+        assertThat(html)
+            .contains("<p class=\"mdocs-indent-2\">中文 GitHub 测试</p>")
+            .contains("<code>github中文</code>");
+    }
+
+    @Test
+    void emitsMathElementsForFrontendEnhancement() {
+        String html = renderer.render("Inline $a^2$ formula.\n\n$$\nb^2\n$$");
+
+        assertThat(html)
+            .contains("<span class=\"language-math\">a^2</span>")
+            .contains("<div class=\"language-math\">b^2");
+    }
 }

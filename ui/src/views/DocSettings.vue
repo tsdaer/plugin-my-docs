@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { VButton, VCard, VLoading, VPageHeader, VSpace, Toast, IconSettings, Dialog } from '@halo-dev/components'
+import {
+  VButton,
+  VCard,
+  VLoading,
+  VPageHeader,
+  VSpace,
+  Toast,
+  IconSettings,
+  Dialog,
+} from '@halo-dev/components'
 import { coreApiClient, axiosInstance } from '@halo-dev/api-client'
 import type { ConfigMap } from '@halo-dev/api-client'
 import { isAxiosError } from 'axios'
@@ -75,6 +84,15 @@ const isLoading = computed(() => isConfigLoading.value || isLibrariesLoading.val
 const isExporting = ref(false)
 const isImporting = ref(false)
 const importInput = ref<HTMLInputElement | null>(null)
+const renderThemeMode = ref<'light' | 'dark'>('light')
+
+const contentThemeOptions = [
+  { label: 'Light', value: 'light' },
+  { label: 'Dark', value: 'dark' },
+  { label: 'WeChat', value: 'wechat' },
+  { label: 'Ant Design', value: 'ant-design' },
+  { label: '自定义 CSS', value: 'custom' },
+]
 
 const settingsState = ref<MyDocsSettings>(parseMyDocsSettings())
 
@@ -212,7 +230,9 @@ function buildLayoutWarnings(settings: MyDocsSettings): string[] {
       continue
     }
     if (!libraryNames.has(placement.libraryName)) {
-      issues.push(`文档库坐标 ${coordinateLabel(placement.row, placement.column)} 指向了不存在的文档库。`)
+      issues.push(
+        `文档库坐标 ${coordinateLabel(placement.row, placement.column)} 指向了不存在的文档库。`,
+      )
       continue
     }
     visiblePlacementKeys.add(`${placement.row}:${placement.column}`)
@@ -227,8 +247,8 @@ function buildLayoutWarnings(settings: MyDocsSettings): string[] {
     }
   }
 
-  const knownLibraries = (libraries.value ?? []).filter((library) =>
-    !assignedLibraries.has(library.metadata.name),
+  const knownLibraries = (libraries.value ?? []).filter(
+    (library) => !assignedLibraries.has(library.metadata.name),
   )
   const occupiedRows = new Map<number, number>()
   for (const key of visiblePlacementKeys) {
@@ -277,18 +297,25 @@ async function persistSettings(normalized: MyDocsSettings) {
     defaultSort: normalized.defaultSort,
     defaultLibraryName: normalized.defaultLibraryName ?? '',
     libraryIndexDefaultColumns:
-      Number(normalized.libraryIndexDefaultColumns)
-      || defaultMyDocsSettings.libraryIndexDefaultColumns,
+      Number(normalized.libraryIndexDefaultColumns) ||
+      defaultMyDocsSettings.libraryIndexDefaultColumns,
     libraryIndexDefaultMaxRows:
-      Number(normalized.libraryIndexDefaultMaxRows)
-      || defaultMyDocsSettings.libraryIndexDefaultMaxRows,
+      Number(normalized.libraryIndexDefaultMaxRows) ||
+      defaultMyDocsSettings.libraryIndexDefaultMaxRows,
     libraryIndexPageLayouts: normalized.libraryIndexPageLayouts,
     libraryIndexRowLayouts: normalized.libraryIndexRowLayouts,
     libraryIndexPlacements: normalized.libraryIndexPlacements,
     libraryIndexFolderTitles: normalized.libraryIndexFolderTitles,
-    renderContentTheme: normalized.renderContentTheme,
-    renderCodeTheme:
-      normalized.renderCodeTheme?.trim() || defaultMyDocsSettings.renderCodeTheme,
+    renderContentThemeLight: normalized.renderContentThemeLight,
+    renderContentThemeDark: normalized.renderContentThemeDark,
+    renderContentThemeLightUrl: normalized.renderContentThemeLightUrl,
+    renderContentThemeDarkUrl: normalized.renderContentThemeDarkUrl,
+    renderContentThemeLightClass: normalized.renderContentThemeLightClass,
+    renderContentThemeDarkClass: normalized.renderContentThemeDarkClass,
+    renderCodeThemeLight:
+      normalized.renderCodeThemeLight?.trim() || defaultMyDocsSettings.renderCodeThemeLight,
+    renderCodeThemeDark:
+      normalized.renderCodeThemeDark?.trim() || defaultMyDocsSettings.renderCodeThemeDark,
     renderLineNumber: !!normalized.renderLineNumber,
     renderAutoSpace: !!normalized.renderAutoSpace,
     renderGfmAutoLink: !!normalized.renderGfmAutoLink,
@@ -308,7 +335,7 @@ async function persistSettings(normalized: MyDocsSettings) {
     ? {
         ...configMap.value,
         data: {
-          ...(configMap.value.data ?? {}),
+          ...configMap.value.data,
           [MY_DOCS_CONFIG_GROUP]: stringifyMyDocsSettings(finalSettings),
         },
       }
@@ -338,7 +365,7 @@ function buildExtensionConfigMap(rawSettings: string): ConfigMap {
     ? {
         ...configMap.value,
         data: {
-          ...(configMap.value.data ?? {}),
+          ...configMap.value.data,
           [MY_DOCS_CONFIG_GROUP]: rawSettings,
         },
       }
@@ -511,7 +538,9 @@ function handleOpenImport() {
 async function restoreBackup(backup: MyDocsBackupFile) {
   const normalizedSettings = parseMyDocsSettings(JSON.stringify(backup.settings))
   const [currentLibraries, currentDocs] = await Promise.all([listAllLibraries(), listAllDocs()])
-  const currentLibraryMap = new Map(currentLibraries.map((library) => [library.metadata.name, library]))
+  const currentLibraryMap = new Map(
+    currentLibraries.map((library) => [library.metadata.name, library]),
+  )
   const currentDocMap = new Map(currentDocs.map((doc) => [doc.metadata.name, doc]))
   const backupLibraryNames = new Set(backup.libraries.map((library) => library.name))
   const backupDocNames = new Set(backup.docs.map((doc) => doc.name))
@@ -659,15 +688,14 @@ async function handleSubmit() {
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">备份与恢复</h3>
           <p class="doc-settings-help">
-            导出文件会包含当前设置、全部文档库以及文档 Markdown 内容。加载时会按快照覆盖并恢复这些数据。
+            导出文件会包含当前设置、全部文档库以及文档 Markdown
+            内容。加载时会按快照覆盖并恢复这些数据。
           </p>
           <VSpace>
             <VButton type="secondary" :loading="isExporting" @click="handleExport">
               导出设置
             </VButton>
-            <VButton :loading="isImporting" @click="handleOpenImport">
-              加载设置
-            </VButton>
+            <VButton :loading="isImporting" @click="handleOpenImport"> 加载设置 </VButton>
           </VSpace>
           <input
             ref="importInput"
@@ -675,7 +703,7 @@ async function handleSubmit() {
             class="hidden"
             type="file"
             @change="handleImportFileChange"
-          >
+          />
         </div>
 
         <div class="doc-settings-section">
@@ -706,7 +734,8 @@ async function handleSubmit() {
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">文档库首页布局</h3>
           <p class="doc-settings-help">
-            每一行都会按照固定槽位宽度排布。默认每行 2 个；特定行可单独改列数，文档库也可指定到具体坐标。
+            每一行都会按照固定槽位宽度排布。默认每行 2
+            个；特定行可单独改列数，文档库也可指定到具体坐标。
             如果多个文档库落在同一个坐标，会折叠成文件夹卡片。
           </p>
           <div class="doc-settings-grid">
@@ -731,11 +760,10 @@ async function handleSubmit() {
               <h4>特定行列数</h4>
               <VButton size="sm" type="secondary" @click="addRowLayout">新增行设置</VButton>
             </div>
-            <p class="doc-settings-help">这里的行号是跨页面的全局行号，例如第 6 行可能落在第 2 页。</p>
-            <p
-              v-if="!settingsState.libraryIndexRowLayouts.length"
-              class="doc-settings-empty"
-            >
+            <p class="doc-settings-help">
+              这里的行号是跨页面的全局行号，例如第 6 行可能落在第 2 页。
+            </p>
+            <p v-if="!settingsState.libraryIndexRowLayouts.length" class="doc-settings-empty">
               当前没有特定行列数设置，所有行都会使用默认每行个数。
             </p>
             <div
@@ -746,11 +774,11 @@ async function handleSubmit() {
               <div class="doc-settings-list-grid doc-settings-list-grid--compact">
                 <label class="doc-settings-field">
                   <span>第几行</span>
-                  <input v-model.number="item.row" min="1" type="number">
+                  <input v-model.number="item.row" min="1" type="number" />
                 </label>
                 <label class="doc-settings-field">
                   <span>该行列数</span>
-                  <input v-model.number="item.columns" min="1" max="24" type="number">
+                  <input v-model.number="item.columns" min="1" max="24" type="number" />
                 </label>
               </div>
               <div class="doc-settings-list-meta">
@@ -765,11 +793,10 @@ async function handleSubmit() {
               <h4>特定页设置</h4>
               <VButton size="sm" type="secondary" @click="addPageLayout">新增页设置</VButton>
             </div>
-            <p class="doc-settings-help">按页覆盖默认每页最大行数，例如第 2 页最多 1 行，第 3 页最多 4 行。</p>
-            <p
-              v-if="!settingsState.libraryIndexPageLayouts.length"
-              class="doc-settings-empty"
-            >
+            <p class="doc-settings-help">
+              按页覆盖默认每页最大行数，例如第 2 页最多 1 行，第 3 页最多 4 行。
+            </p>
+            <p v-if="!settingsState.libraryIndexPageLayouts.length" class="doc-settings-empty">
               当前没有特定页设置，所有页面都会使用默认每页最大行数。
             </p>
             <div
@@ -780,11 +807,11 @@ async function handleSubmit() {
               <div class="doc-settings-list-grid doc-settings-list-grid--compact">
                 <label class="doc-settings-field">
                   <span>第几页</span>
-                  <input v-model.number="item.page" min="1" type="number">
+                  <input v-model.number="item.page" min="1" type="number" />
                 </label>
                 <label class="doc-settings-field">
                   <span>最大行数</span>
-                  <input v-model.number="item.maxRows" min="1" max="24" type="number">
+                  <input v-model.number="item.maxRows" min="1" max="24" type="number" />
                 </label>
               </div>
               <div class="doc-settings-list-meta">
@@ -800,12 +827,10 @@ async function handleSubmit() {
               <VButton size="sm" type="secondary" @click="addPlacement">新增文档库坐标</VButton>
             </div>
             <p class="doc-settings-help">
-              坐标按“第几行 / 第几列”填写。多个文档库可指定到同一个坐标，此时前台会渲染为文件夹卡片。
+              坐标按“第几行 /
+              第几列”填写。多个文档库可指定到同一个坐标，此时前台会渲染为文件夹卡片。
             </p>
-            <p
-              v-if="!settingsState.libraryIndexPlacements.length"
-              class="doc-settings-empty"
-            >
+            <p v-if="!settingsState.libraryIndexPlacements.length" class="doc-settings-empty">
               当前没有手动坐标，未指定的文档库会按顺序自动填充。
             </p>
             <div
@@ -828,11 +853,11 @@ async function handleSubmit() {
                 </label>
                 <label class="doc-settings-field">
                   <span>第几行</span>
-                  <input v-model.number="item.row" min="1" type="number">
+                  <input v-model.number="item.row" min="1" type="number" />
                 </label>
                 <label class="doc-settings-field">
                   <span>第几列</span>
-                  <input v-model.number="item.column" min="1" type="number">
+                  <input v-model.number="item.column" min="1" type="number" />
                 </label>
               </div>
               <div class="doc-settings-list-meta">
@@ -850,10 +875,7 @@ async function handleSubmit() {
             <p class="doc-settings-help">
               仅当某个坐标落入多个文档库时生效；未设置时，会使用该文件夹中排序最靠前的文档库名称。
             </p>
-            <p
-              v-if="!settingsState.libraryIndexFolderTitles.length"
-              class="doc-settings-empty"
-            >
+            <p v-if="!settingsState.libraryIndexFolderTitles.length" class="doc-settings-empty">
               当前没有坐标标题。
             </p>
             <div
@@ -864,19 +886,19 @@ async function handleSubmit() {
               <div class="doc-settings-list-grid">
                 <label class="doc-settings-field">
                   <span>第几行</span>
-                  <input v-model.number="item.row" min="1" type="number">
+                  <input v-model.number="item.row" min="1" type="number" />
                 </label>
                 <label class="doc-settings-field">
                   <span>第几列</span>
-                  <input v-model.number="item.column" min="1" type="number">
+                  <input v-model.number="item.column" min="1" type="number" />
                 </label>
                 <label class="doc-settings-field doc-settings-field--wide">
                   <span>文件夹名称</span>
-                  <input v-model.trim="item.title" maxlength="100" type="text">
+                  <input v-model.trim="item.title" maxlength="100" type="text" />
                 </label>
                 <label class="doc-settings-field doc-settings-field--wide">
                   <span>文件夹描述</span>
-                  <input v-model.trim="item.description" maxlength="200" type="text">
+                  <input v-model.trim="item.description" maxlength="200" type="text" />
                 </label>
               </div>
               <div class="doc-settings-list-meta">
@@ -890,84 +912,173 @@ async function handleSubmit() {
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">文档页面渲染</h3>
           <p class="doc-settings-help">
-            这些设置用于前台文档页面的渲染表现，不影响后台文档编辑器。
+            这些设置仅用于前台文档阅读页。内容与代码主题会跟随 Halo 当前的明暗模式切换。
           </p>
-          <div class="doc-settings-grid">
-            <FormKit
-              type="select"
-              name="renderContentTheme"
-              label="内容主题"
-              v-model="settingsState.renderContentTheme"
-              :options="[
-                { label: 'Light', value: 'light' },
-                { label: 'Dark', value: 'dark' },
-                { label: 'WeChat', value: 'wechat' },
-                { label: 'Ant Design', value: 'ant-design' },
-              ]"
-              validation="required"
-            />
-            <FormKit
-              type="text"
-              name="renderCodeTheme"
-              label="代码主题"
-              v-model="settingsState.renderCodeTheme"
-              help="填写 Vditor / Chroma 代码主题名，例如 github、monokai。"
-              validation="required|length:1,100"
-            />
+          <div class="doc-theme-mode-tabs" role="tablist" aria-label="渲染主题模式">
+            <VButton
+              class="doc-theme-mode-tab"
+              :class="{ 'is-active': renderThemeMode === 'light' }"
+              type="secondary"
+              role="tab"
+              :aria-selected="renderThemeMode === 'light'"
+              @click="renderThemeMode = 'light'"
+            >
+              浅色主题
+            </VButton>
+            <VButton
+              class="doc-theme-mode-tab"
+              :class="{ 'is-active': renderThemeMode === 'dark' }"
+              type="secondary"
+              role="tab"
+              :aria-selected="renderThemeMode === 'dark'"
+              @click="renderThemeMode = 'dark'"
+            >
+              深色主题
+            </VButton>
+          </div>
+
+          <div v-if="renderThemeMode === 'light'" class="doc-theme-mode-panel" role="tabpanel">
+            <div class="doc-settings-grid">
+              <FormKit
+                type="select"
+                name="renderContentThemeLight"
+                label="浅色内容主题"
+                v-model="settingsState.renderContentThemeLight"
+                :options="contentThemeOptions"
+                validation="required"
+              />
+              <FormKit
+                type="text"
+                name="renderCodeThemeLight"
+                label="浅色代码主题"
+                v-model="settingsState.renderCodeThemeLight"
+                help="填写 highlight.js 主题名，例如 github、atom-one-light。"
+                validation="required|length:1,100"
+              />
+            </div>
+            <div
+              v-if="settingsState.renderContentThemeLight === 'custom'"
+              class="doc-settings-grid"
+            >
+              <FormKit
+                type="text"
+                name="renderContentThemeLightUrl"
+                label="浅色主题 CSS 地址"
+                v-model="settingsState.renderContentThemeLightUrl"
+                help="仅支持 https:// 地址或 / 开头的站内绝对路径。"
+                validation="required|length:1,1000"
+              />
+              <FormKit
+                type="text"
+                name="renderContentThemeLightClass"
+                label="浅色正文容器 class"
+                v-model="settingsState.renderContentThemeLightClass"
+                help="多个 class 用空格分隔，例如 markdown-body 或 vditor-reset。"
+                validation="required|length:1,200"
+              />
+            </div>
+          </div>
+
+          <div v-else class="doc-theme-mode-panel" role="tabpanel">
+            <div class="doc-settings-grid">
+              <FormKit
+                type="select"
+                name="renderContentThemeDark"
+                label="深色内容主题"
+                v-model="settingsState.renderContentThemeDark"
+                :options="contentThemeOptions"
+                validation="required"
+              />
+              <FormKit
+                type="text"
+                name="renderCodeThemeDark"
+                label="深色代码主题"
+                v-model="settingsState.renderCodeThemeDark"
+                help="填写 highlight.js 主题名，例如 github-dark、monokai。"
+                validation="required|length:1,100"
+              />
+            </div>
+            <div v-if="settingsState.renderContentThemeDark === 'custom'" class="doc-settings-grid">
+              <FormKit
+                type="text"
+                name="renderContentThemeDarkUrl"
+                label="深色主题 CSS 地址"
+                v-model="settingsState.renderContentThemeDarkUrl"
+                help="仅支持 https:// 地址或 / 开头的站内绝对路径。"
+                validation="required|length:1,1000"
+              />
+              <FormKit
+                type="text"
+                name="renderContentThemeDarkClass"
+                label="深色正文容器 class"
+                v-model="settingsState.renderContentThemeDarkClass"
+                help="多个 class 用空格分隔，例如 markdown-body theme-dark。"
+                validation="required|length:1,200"
+              />
+            </div>
           </div>
           <div class="doc-settings-grid">
             <FormKit
               type="switch"
               name="renderLineNumber"
               label="代码行号"
+              help="为普通围栏代码块显示行号。"
               v-model="settingsState.renderLineNumber"
             />
             <FormKit
               type="switch"
               name="renderAutoSpace"
               label="自动空格"
+              help="在中文与英文、数字的边界自动补空格。"
               v-model="settingsState.renderAutoSpace"
             />
             <FormKit
               type="switch"
               name="renderGfmAutoLink"
               label="自动链接"
+              help="把 Markdown 中的裸 URL 自动转换为链接。"
               v-model="settingsState.renderGfmAutoLink"
             />
             <FormKit
               type="switch"
               name="renderFootnotes"
               label="脚注"
+              help="解析 [^1] 形式的 Markdown 脚注。"
               v-model="settingsState.renderFootnotes"
             />
             <FormKit
               type="switch"
               name="renderMark"
               label="Mark 标记"
+              help="把 ==文字== 渲染为高亮标记。"
               v-model="settingsState.renderMark"
             />
             <FormKit
               type="switch"
               name="renderFixTermTypo"
               label="术语修正"
+              help="修正常见技术术语的大小写，例如 github → GitHub。"
               v-model="settingsState.renderFixTermTypo"
             />
             <FormKit
               type="switch"
               name="renderParagraphBeginningSpace"
               label="段首空两格"
+              help="为正文顶层段落添加两字符首行缩进。"
               v-model="settingsState.renderParagraphBeginningSpace"
             />
             <FormKit
               type="switch"
               name="renderCodeBlockPreview"
-              label="代码块即时渲染"
+              label="图表代码块渲染"
+              help="渲染 Mermaid、Graphviz、ECharts、Markmap 等特殊代码块。"
               v-model="settingsState.renderCodeBlockPreview"
             />
             <FormKit
               type="switch"
               name="renderMathBlockPreview"
-              label="公式块即时渲染"
+              label="数学公式渲染"
+              help="使用 KaTeX 渲染 $...$ 与 $$...$$ 公式。"
               v-model="settingsState.renderMathBlockPreview"
             />
           </div>
@@ -977,7 +1088,8 @@ async function handleSubmit() {
           <h3 class="doc-settings-title">全局自定义代码</h3>
           <p class="doc-settings-help">
             ⚠️ 以下代码会原样注入到全部文档阅读页，并在访客浏览器中执行。请仅填入你信任的代码——
-            恶意脚本可能危害访客安全。文档库与单篇文档也可分别配置各自的代码，注入顺序为 全局 → 文档库 → 文档。
+            恶意脚本可能危害访客安全。文档库与单篇文档也可分别配置各自的代码，注入顺序为 全局 →
+            文档库 → 文档。
           </p>
           <div class="doc-settings-grid doc-settings-grid--code">
             <FormKit
@@ -1002,7 +1114,8 @@ async function handleSubmit() {
         <div class="doc-settings-section">
           <h3 class="doc-settings-title">AI 辅助编写</h3>
           <p class="doc-settings-help">
-            复制下面的提示词发给 AI 智能体（如 ChatGPT、Claude），它会按 my-docs 的规范帮你生成代码。
+            复制下面的提示词发给 AI 智能体（如 ChatGPT、Claude），它会按 my-docs
+            的规范帮你生成代码。
             「后台代码片段」用于上方及文档库/文档的自定义代码输入框；「扩展插件开发」用于编写独立的
             Halo 插件来扩展文档阅读页。复制后在提示词末尾补上你的具体需求即可。
           </p>
@@ -1017,7 +1130,11 @@ async function handleSubmit() {
         </div>
 
         <VSpace>
-          <VButton type="secondary" :loading="isImporting" @click="$formkit.submit('my-docs-settings-form')">
+          <VButton
+            type="secondary"
+            :loading="isImporting"
+            @click="$formkit.submit('my-docs-settings-form')"
+          >
             保存设置
           </VButton>
           <VButton @click="router.push({ name: 'DocLibraries' })">取消</VButton>
@@ -1073,6 +1190,51 @@ async function handleSubmit() {
   padding-top: 0;
   padding-bottom: 0;
   margin-bottom: 0;
+}
+
+.doc-theme-mode-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.doc-theme-mode-tab {
+  min-width: 112px;
+}
+
+.doc-theme-mode-tab.is-active {
+  color: #0f766e;
+  border-color: #99f6e4;
+  background: #ccfbf1;
+}
+
+.doc-theme-mode-panel {
+  min-height: 132px;
+}
+
+.doc-theme-mode-panel .doc-settings-grid {
+  gap: 16px;
+}
+
+.doc-theme-mode-panel .doc-settings-grid + .doc-settings-grid {
+  margin-top: 16px;
+}
+
+.doc-theme-mode-panel :deep(.formkit-outer) {
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.doc-theme-mode-panel :deep(.formkit-inner) {
+  height: 36px;
+  min-height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 @media (max-width: 720px) {

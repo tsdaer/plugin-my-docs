@@ -1,21 +1,28 @@
 package com.github.mydocs.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.github.mydocs.extension.Doc;
 import com.github.mydocs.extension.DocLibrary;
 import com.github.mydocs.extensionpoint.DocContentHandler;
 import com.github.mydocs.extensionpoint.DocContentHandlerChain;
+import com.github.mydocs.service.MarkdownRenderer;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import run.halo.app.plugin.ReactiveSettingFetcher;
 import run.halo.app.plugin.extensionpoint.ExtensionGetter;
 
 class DocDetailContentBuilderTest {
 
     // 无内容处理扩展时，链为恒等变换，等同旧行为。
     private final DocDetailContentBuilder builder =
-        new DocDetailContentBuilder(new DocContentHandlerChain(emptyGetter()));
+        builderWith(emptyGetter(), new DocIndexSettings());
 
     @Test
     void rewritesSameLibraryShortLinksAndExtractsOutline() {
@@ -80,7 +87,8 @@ class DocDetailContentBuilderTest {
             return reactor.core.publisher.Mono.just(context);
         };
         var chainBuilder = new DocDetailContentBuilder(
-            new DocContentHandlerChain(getterWith(handler)));
+            new DocContentHandlerChain(getterWith(handler)), new MarkdownRenderer(),
+            settingsService(new DocIndexSettings()));
 
         var doc = new Doc();
         var spec = new Doc.Spec();
@@ -94,6 +102,40 @@ class DocDetailContentBuilderTest {
         assertThat(content.getOutline())
             .extracting(DocDetailContentBuilder.OutlineHeading::getId)
             .containsExactly("intro", "added");
+    }
+
+    @Test
+    void rendersRawMarkdownWithCurrentSettingsBeforeContentHandlers() {
+        var settings = new DocIndexSettings();
+        settings.setRenderMark(true);
+        settings.setRenderParagraphBeginningSpace(true);
+        var rawBuilder = builderWith(emptyGetter(), settings);
+        var doc = new Doc();
+        var spec = new Doc.Spec();
+        spec.setRaw("## Intro\n\n==marked==");
+        spec.setRawType("markdown");
+        spec.setContent("<p>stale</p>");
+        doc.setSpec(spec);
+
+        var content = rawBuilder.build(library("guide"), doc).block();
+
+        assertThat(content.getHtml())
+            .contains("<h2 id=\"intro\">Intro</h2>")
+            .contains("<p class=\"mdocs-indent-2\"><mark>marked</mark></p>")
+            .doesNotContain("stale");
+    }
+
+    private static DocDetailContentBuilder builderWith(ExtensionGetter getter,
+        DocIndexSettings settings) {
+        return new DocDetailContentBuilder(new DocContentHandlerChain(getter),
+            new MarkdownRenderer(), settingsService(settings));
+    }
+
+    private static DocIndexSettingsService settingsService(DocIndexSettings settings) {
+        ReactiveSettingFetcher fetcher = mock(ReactiveSettingFetcher.class);
+        when(fetcher.fetch(eq(DocIndexSettingsService.BASIC_GROUP), any()))
+            .thenReturn(Mono.just(settings));
+        return new DocIndexSettingsService(fetcher);
     }
 
     private static DocLibrary library(String slug) {

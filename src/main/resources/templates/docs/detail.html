@@ -37,18 +37,17 @@
     .mdocs-outline-link { display: block; flex: 1 1 auto; min-width: 0; padding: 7px 10px; color: var(--mdocs-muted); text-decoration: none; border-radius: 8px; font-size: 14px; line-height: 1.45; transition: color .2s ease, background-color .2s ease; }
     .mdocs-outline-link:hover, .mdocs-outline-link.is-active { color: var(--mdocs-accent); background: var(--mdocs-accent-soft); }
     .mdocs-outline-row:hover .mdocs-pin-button { opacity: 1; }
-    .mdocs-content { line-height: 1.8; font-size: 16px; }
+    .mdocs-content { min-width: 0; overflow-wrap: anywhere; }
     .mdocs-content :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: 88px; }
-    .mdocs-content h2 { margin-top: 34px; border-bottom: 1px solid var(--mdocs-border); padding-bottom: 8px; color: var(--mdocs-text-strong); }
-    .mdocs-content h3 { margin-top: 28px; }
-    .mdocs-content a { color: var(--mdocs-accent); }
-    .mdocs-content pre { overflow-x: auto; padding: 16px; border-radius: 8px; background: var(--mdocs-code-bg); color: var(--mdocs-code-text); }
-    .mdocs-content code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .mdocs-content :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: var(--mdocs-inline-code-bg); }
     .mdocs-content img { max-width: 100%; height: auto; }
-    .mdocs-content table { width: 100%; border-collapse: collapse; }
-    .mdocs-content th, .mdocs-content td { border: 1px solid var(--mdocs-border); padding: 8px 10px; }
-    .mdocs-content blockquote { margin: 20px 0; padding-left: 16px; border-left: 3px solid var(--mdocs-border); color: var(--mdocs-muted); }
+    .mdocs-content pre { max-width: 100%; overflow-x: auto; }
+    .mdocs-content .mdocs-indent-2 { text-indent: 2em; }
+    .mdocs-content.mdocs-theme-fallback { color: var(--mdocs-text); font-size: 16px; line-height: 1.8; }
+    .mdocs-content.mdocs-theme-fallback a { color: var(--mdocs-accent); }
+    .mdocs-content.mdocs-theme-fallback pre { padding: 16px; border-radius: 8px; background: var(--mdocs-code-bg); color: var(--mdocs-code-text); }
+    .mdocs-content.mdocs-theme-fallback code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .mdocs-content.mdocs-theme-fallback table { width: 100%; border-collapse: collapse; }
+    .mdocs-content.mdocs-theme-fallback th, .mdocs-content.mdocs-theme-fallback td { border: 1px solid var(--mdocs-border); padding: 8px 10px; }
     .mdocs-content :target { animation: mdocs-target-flash 1.6s ease; }
     @keyframes mdocs-target-flash {
       0% { background: transparent; }
@@ -81,7 +80,7 @@
         <div class="mdocs-outline-panel"
              th:replace="~{plugin:my-docs:docs/modules/outline :: outline(items=${detailContent.outline})}"></div>
       </details>
-      <div class="mdocs-content" th:utext="${detailContent.html}"></div>
+      <div id="mdocs-content" class="mdocs-content mdocs-theme-fallback" th:utext="${detailContent.html}"></div>
     </article>
     <aside class="mdocs-outline" th:if="${!#lists.isEmpty(detailContent.outline)}">
       <p class="mdocs-outline-title">本页目录</p>
@@ -89,6 +88,131 @@
     </aside>
   </main>
   <th:block th:replace="~{plugin:my-docs:docs/modules/collapse :: collapse}"></th:block>
+  <script src="/plugins/my-docs/assets/vditor/dist/method.min.js"></script>
+  <script th:inline="javascript">
+    (function () {
+      var content = document.getElementById('mdocs-content');
+      if (!content) {
+        return;
+      }
+
+      var settings = {
+        contentThemeLight: /*[[${detailContent.renderSettings.renderContentThemeLight}]]*/ 'light',
+        contentThemeDark: /*[[${detailContent.renderSettings.renderContentThemeDark}]]*/ 'dark',
+        contentThemeLightUrl: /*[[${detailContent.renderSettings.renderContentThemeLightUrl}]]*/ '',
+        contentThemeDarkUrl: /*[[${detailContent.renderSettings.renderContentThemeDarkUrl}]]*/ '',
+        contentThemeLightClass: /*[[${detailContent.renderSettings.renderContentThemeLightClass}]]*/ 'markdown-body',
+        contentThemeDarkClass: /*[[${detailContent.renderSettings.renderContentThemeDarkClass}]]*/ 'markdown-body',
+        codeThemeLight: /*[[${detailContent.renderSettings.renderCodeThemeLight}]]*/ 'github',
+        codeThemeDark: /*[[${detailContent.renderSettings.renderCodeThemeDark}]]*/ 'github-dark',
+        lineNumber: /*[[${detailContent.renderSettings.renderLineNumber}]]*/ false,
+        codeBlockPreview: /*[[${detailContent.renderSettings.renderCodeBlockPreview}]]*/ true,
+        mathBlockPreview: /*[[${detailContent.renderSettings.renderMathBlockPreview}]]*/ true,
+      };
+      var cdn = '/plugins/my-docs/assets/vditor';
+      var managedClasses = [];
+      var loadedThemeHref = '';
+      var themeLink = document.createElement('link');
+      var baseLink = document.createElement('link');
+      themeLink.rel = 'stylesheet';
+      themeLink.id = 'mdocs-content-theme';
+      baseLink.rel = 'stylesheet';
+      baseLink.id = 'mdocs-vditor-base';
+      baseLink.href = cdn + '/dist/index.css';
+      document.head.appendChild(themeLink);
+      document.head.appendChild(baseLink);
+
+      function currentScheme() {
+        return document.documentElement.getAttribute('data-mdocs-effective-scheme') === 'dark'
+          ? 'dark' : 'light';
+      }
+
+      function clearManagedClasses() {
+        managedClasses.forEach(function (name) { content.classList.remove(name); });
+        managedClasses = [];
+      }
+
+      function addManagedClasses(value) {
+        String(value || '').split(/\s+/).filter(Boolean).forEach(function (name) {
+          content.classList.add(name);
+          managedClasses.push(name);
+        });
+      }
+
+      function applyTheme(scheme) {
+        var suffix = scheme === 'dark' ? 'Dark' : 'Light';
+        var contentTheme = settings['contentTheme' + suffix];
+        var customUrl = settings['contentTheme' + suffix + 'Url'];
+        var customClass = settings['contentTheme' + suffix + 'Class'];
+        var codeTheme = settings['codeTheme' + suffix];
+        var builtIn = contentTheme !== 'custom';
+
+        clearManagedClasses();
+        content.classList.add('mdocs-theme-fallback');
+        var nextThemeHref;
+        if (builtIn) {
+          addManagedClasses('vditor-reset');
+          nextThemeHref = cdn + '/dist/css/content-theme/' + contentTheme + '.css';
+        } else {
+          addManagedClasses(customClass);
+          nextThemeHref = customUrl;
+        }
+        themeLink.onload = function () {
+          loadedThemeHref = nextThemeHref;
+          content.classList.remove('mdocs-theme-fallback');
+        };
+        themeLink.onerror = function () {
+          loadedThemeHref = '';
+          content.classList.add('mdocs-theme-fallback');
+        };
+        if (loadedThemeHref === nextThemeHref) {
+          content.classList.remove('mdocs-theme-fallback');
+        } else {
+          themeLink.href = nextThemeHref;
+        }
+
+        if (window.Vditor) {
+          window.Vditor.setCodeTheme(codeTheme, cdn);
+        }
+      }
+
+      function enhanceContent() {
+        if (!window.Vditor) {
+          return;
+        }
+        var scheme = currentScheme();
+        var suffix = scheme === 'dark' ? 'Dark' : 'Light';
+        var codeTheme = settings['codeTheme' + suffix];
+        var highlightOptions = { style: codeTheme, lineNumber: settings.lineNumber };
+        window.Vditor.highlightRender(highlightOptions, content, cdn);
+        window.Vditor.codeRender(content, highlightOptions);
+        if (settings.mathBlockPreview) {
+          window.Vditor.mathRender(content, { cdn: cdn });
+        }
+        if (settings.codeBlockPreview) {
+          window.Vditor.mermaidRender(content, cdn, scheme);
+          window.Vditor.flowchartRender(content, cdn);
+          window.Vditor.graphvizRender(content, cdn);
+          window.Vditor.chartRender(content, cdn, scheme);
+          window.Vditor.mindmapRender(content, cdn, scheme);
+          window.Vditor.markmapRender(content, cdn);
+          window.Vditor.plantumlRender(content, cdn);
+          window.Vditor.abcRender(content, cdn);
+          window.Vditor.SMILESRender(content, cdn, scheme);
+        }
+      }
+
+      applyTheme(currentScheme());
+      try {
+        enhanceContent();
+      } catch (error) {
+        console.warn('[my-docs] Frontend markdown enhancement failed.', error);
+      }
+      window.addEventListener('mdocs:scheme-change', function (event) {
+        applyTheme(event.detail && event.detail.scheme === 'dark' ? 'dark' : 'light');
+      });
+    })();
+  </script>
   <th:block th:if="${!#strings.isEmpty(mdocsCustomBodyHtml)}" th:utext="${mdocsCustomBodyHtml}"></th:block>
 </body>
 </html>

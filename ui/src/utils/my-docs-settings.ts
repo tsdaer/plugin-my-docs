@@ -2,7 +2,8 @@ export const MY_DOCS_CONFIG_MAP_NAME = 'my-docs-configmap'
 export const MY_DOCS_CONFIG_GROUP = 'basic'
 
 export type DocSort = 'priorityAsc' | 'createdDesc' | 'titleAsc'
-export type DocContentTheme = 'light' | 'dark' | 'wechat' | 'ant-design'
+export type BuiltInDocContentTheme = 'light' | 'dark' | 'wechat' | 'ant-design'
+export type DocContentTheme = BuiltInDocContentTheme | 'custom'
 
 export interface LibraryPageLayoutSetting {
   page: number
@@ -36,8 +37,14 @@ export interface MyDocsSettings {
   libraryIndexRowLayouts: LibraryRowLayoutSetting[]
   libraryIndexPlacements: LibraryPlacementSetting[]
   libraryIndexFolderTitles: LibraryFolderTitleSetting[]
-  renderContentTheme: DocContentTheme
-  renderCodeTheme: string
+  renderContentThemeLight: DocContentTheme
+  renderContentThemeDark: DocContentTheme
+  renderContentThemeLightUrl: string
+  renderContentThemeDarkUrl: string
+  renderContentThemeLightClass: string
+  renderContentThemeDarkClass: string
+  renderCodeThemeLight: string
+  renderCodeThemeDark: string
   renderLineNumber: boolean
   renderAutoSpace: boolean
   renderGfmAutoLink: boolean
@@ -60,8 +67,14 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   libraryIndexRowLayouts: [],
   libraryIndexPlacements: [],
   libraryIndexFolderTitles: [],
-  renderContentTheme: 'light',
-  renderCodeTheme: 'github',
+  renderContentThemeLight: 'light',
+  renderContentThemeDark: 'dark',
+  renderContentThemeLightUrl: '',
+  renderContentThemeDarkUrl: '',
+  renderContentThemeLightClass: 'markdown-body',
+  renderContentThemeDarkClass: 'markdown-body',
+  renderCodeThemeLight: 'github',
+  renderCodeThemeDark: 'github-dark',
   renderLineNumber: false,
   renderAutoSpace: false,
   renderGfmAutoLink: true,
@@ -85,8 +98,15 @@ function cloneDefaultSettings(): MyDocsSettings {
   }
 }
 
-const contentThemes = new Set<DocContentTheme>(['light', 'dark', 'wechat', 'ant-design'])
+const contentThemes = new Set<DocContentTheme>(['light', 'dark', 'wechat', 'ant-design', 'custom'])
+const legacyContentThemes = new Set<BuiltInDocContentTheme>([
+  'light',
+  'dark',
+  'wechat',
+  'ant-design',
+])
 const docSorts = new Set<DocSort>(['priorityAsc', 'createdDesc', 'titleAsc'])
+const cssClassPattern = /^[A-Za-z_][A-Za-z0-9_-]*$/
 
 function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
@@ -96,9 +116,32 @@ function readString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
 }
 
-function readNumber(value: unknown, fallback: number): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+function normalizeThemeUrl(value: unknown): string {
+  const url = readString(value, '').trim()
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return url
+  }
+  try {
+    return new URL(url).protocol === 'https:' ? url : ''
+  } catch {
+    return ''
+  }
+}
+
+function normalizeThemeClass(value: unknown): string {
+  const classes = readString(value, '').trim().split(/\s+/).filter(Boolean)
+  if (
+    !classes.length ||
+    classes.length > 10 ||
+    classes.some((item) => !cssClassPattern.test(item))
+  ) {
+    return 'markdown-body'
+  }
+  return Array.from(new Set(classes)).join(' ')
+}
+
+function readContentTheme(value: unknown, fallback: DocContentTheme): DocContentTheme {
+  return contentThemes.has(value as DocContentTheme) ? (value as DocContentTheme) : fallback
 }
 
 function normalizePositiveInt(value: unknown, fallback: number, max = 24): number {
@@ -186,7 +229,9 @@ function readPlacements(value: unknown): LibraryPlacementSetting[] {
       return { libraryName, row, column }
     })
     .filter((item): item is LibraryPlacementSetting => !!item)
-    .sort((a, b) => a.row - b.row || a.column - b.column || a.libraryName.localeCompare(b.libraryName))
+    .sort(
+      (a, b) => a.row - b.row || a.column - b.column || a.libraryName.localeCompare(b.libraryName),
+    )
 }
 
 function readFolderTitles(value: unknown): LibraryFolderTitleSetting[] {
@@ -225,13 +270,31 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Partial<MyDocsSettings>
+    const parsed = JSON.parse(raw) as Partial<MyDocsSettings> & {
+      renderContentTheme?: BuiltInDocContentTheme
+      renderCodeTheme?: string
+    }
     const defaultSort = docSorts.has(parsed.defaultSort as DocSort)
       ? (parsed.defaultSort as DocSort)
       : defaultMyDocsSettings.defaultSort
-    const renderContentTheme = contentThemes.has(parsed.renderContentTheme as DocContentTheme)
-      ? (parsed.renderContentTheme as DocContentTheme)
-      : defaultMyDocsSettings.renderContentTheme
+    const legacyContentTheme = legacyContentThemes.has(
+      parsed.renderContentTheme as BuiltInDocContentTheme,
+    )
+      ? (parsed.renderContentTheme as BuiltInDocContentTheme)
+      : undefined
+    const legacyCodeTheme = readString(parsed.renderCodeTheme, '').trim()
+    const renderContentThemeLight = readContentTheme(
+      parsed.renderContentThemeLight,
+      legacyContentTheme ?? defaultMyDocsSettings.renderContentThemeLight,
+    )
+    const renderContentThemeDark = readContentTheme(
+      parsed.renderContentThemeDark,
+      legacyContentTheme === 'light'
+        ? 'dark'
+        : (legacyContentTheme ?? defaultMyDocsSettings.renderContentThemeDark),
+    )
+    const renderContentThemeLightUrl = normalizeThemeUrl(parsed.renderContentThemeLightUrl)
+    const renderContentThemeDarkUrl = normalizeThemeUrl(parsed.renderContentThemeDarkUrl)
 
     return {
       defaultSort,
@@ -253,8 +316,30 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
       libraryIndexRowLayouts: readRowLayouts(parsed.libraryIndexRowLayouts),
       libraryIndexPlacements: readPlacements(parsed.libraryIndexPlacements),
       libraryIndexFolderTitles: readFolderTitles(parsed.libraryIndexFolderTitles),
-      renderContentTheme,
-      renderCodeTheme: readString(parsed.renderCodeTheme, defaultMyDocsSettings.renderCodeTheme),
+      renderContentThemeLight:
+        renderContentThemeLight === 'custom' && !renderContentThemeLightUrl
+          ? defaultMyDocsSettings.renderContentThemeLight
+          : renderContentThemeLight,
+      renderContentThemeDark:
+        renderContentThemeDark === 'custom' && !renderContentThemeDarkUrl
+          ? defaultMyDocsSettings.renderContentThemeDark
+          : renderContentThemeDark,
+      renderContentThemeLightUrl,
+      renderContentThemeDarkUrl,
+      renderContentThemeLightClass: normalizeThemeClass(parsed.renderContentThemeLightClass),
+      renderContentThemeDarkClass: normalizeThemeClass(parsed.renderContentThemeDarkClass),
+      renderCodeThemeLight:
+        readString(
+          parsed.renderCodeThemeLight,
+          legacyCodeTheme || defaultMyDocsSettings.renderCodeThemeLight,
+        ).trim() || defaultMyDocsSettings.renderCodeThemeLight,
+      renderCodeThemeDark:
+        readString(
+          parsed.renderCodeThemeDark,
+          legacyCodeTheme === 'github'
+            ? defaultMyDocsSettings.renderCodeThemeDark
+            : legacyCodeTheme || defaultMyDocsSettings.renderCodeThemeDark,
+        ).trim() || defaultMyDocsSettings.renderCodeThemeDark,
       renderLineNumber: readBoolean(
         parsed.renderLineNumber,
         defaultMyDocsSettings.renderLineNumber,
@@ -264,10 +349,7 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
         parsed.renderGfmAutoLink,
         defaultMyDocsSettings.renderGfmAutoLink,
       ),
-      renderFootnotes: readBoolean(
-        parsed.renderFootnotes,
-        defaultMyDocsSettings.renderFootnotes,
-      ),
+      renderFootnotes: readBoolean(parsed.renderFootnotes, defaultMyDocsSettings.renderFootnotes),
       renderMark: readBoolean(parsed.renderMark, defaultMyDocsSettings.renderMark),
       renderFixTermTypo: readBoolean(
         parsed.renderFixTermTypo,

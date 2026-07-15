@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { defaultMyDocsSettings, parseMyDocsSettings, stringifyMyDocsSettings } from './my-docs-settings'
+import {
+  defaultMyDocsSettings,
+  parseMyDocsSettings,
+  stringifyMyDocsSettings,
+} from './my-docs-settings'
 
 describe('my-docs settings', () => {
   it('returns defaults for empty input', () => {
@@ -20,13 +24,12 @@ describe('my-docs settings', () => {
             { row: 5, columns: 4 },
             { row: 2, columns: 1 },
           ],
-          libraryIndexPlacements: [
-            { libraryName: 'guide', row: 2, column: 3 },
-          ],
+          libraryIndexPlacements: [{ libraryName: 'guide', row: 2, column: 3 }],
           libraryIndexFolderTitles: [
             { row: 2, column: 3, title: '入门合集', description: '集中展示新手文档库' },
           ],
-          renderContentTheme: 'wechat',
+          renderContentThemeLight: 'wechat',
+          renderContentThemeDark: 'dark',
           renderLineNumber: true,
           renderAutoSpace: true,
         }),
@@ -43,13 +46,12 @@ describe('my-docs settings', () => {
         { row: 2, columns: 1 },
         { row: 5, columns: 4 },
       ],
-      libraryIndexPlacements: [
-        { libraryName: 'guide', row: 2, column: 3 },
-      ],
+      libraryIndexPlacements: [{ libraryName: 'guide', row: 2, column: 3 }],
       libraryIndexFolderTitles: [
         { row: 2, column: 3, title: '入门合集', description: '集中展示新手文档库' },
       ],
-      renderContentTheme: 'wechat',
+      renderContentThemeLight: 'wechat',
+      renderContentThemeDark: 'dark',
       renderLineNumber: true,
       renderAutoSpace: true,
     })
@@ -96,13 +98,60 @@ describe('my-docs settings', () => {
   it('stringifies settings for config map storage', () => {
     const raw = stringifyMyDocsSettings({
       ...defaultMyDocsSettings,
-      renderContentTheme: 'dark',
-      renderCodeTheme: 'monokai',
+      renderContentThemeLight: 'wechat',
+      renderContentThemeDark: 'custom',
+      renderContentThemeDarkUrl: 'https://cdn.example.com/dark.css',
+      renderContentThemeDarkClass: 'markdown-body theme-dark',
+      renderCodeThemeLight: 'github',
+      renderCodeThemeDark: 'monokai',
     })
 
     expect(JSON.parse(raw)).toMatchObject({
-      renderContentTheme: 'dark',
-      renderCodeTheme: 'monokai',
+      renderContentThemeLight: 'wechat',
+      renderContentThemeDark: 'custom',
+      renderContentThemeDarkUrl: 'https://cdn.example.com/dark.css',
+      renderContentThemeDarkClass: 'markdown-body theme-dark',
+      renderCodeThemeDark: 'monokai',
+    })
+  })
+
+  it('migrates legacy single themes to light and dark settings', () => {
+    expect(
+      parseMyDocsSettings(
+        JSON.stringify({ renderContentTheme: 'light', renderCodeTheme: 'github' }),
+      ),
+    ).toMatchObject({
+      renderContentThemeLight: 'light',
+      renderContentThemeDark: 'dark',
+      renderCodeThemeLight: 'github',
+      renderCodeThemeDark: 'github-dark',
+    })
+
+    expect(
+      parseMyDocsSettings(
+        JSON.stringify({ renderContentTheme: 'wechat', renderCodeTheme: 'monokai' }),
+      ),
+    ).toMatchObject({
+      renderContentThemeLight: 'wechat',
+      renderContentThemeDark: 'wechat',
+      renderCodeThemeLight: 'monokai',
+      renderCodeThemeDark: 'monokai',
+    })
+  })
+
+  it('rejects unsafe custom theme urls and classes', () => {
+    expect(
+      parseMyDocsSettings(
+        JSON.stringify({
+          renderContentThemeLight: 'custom',
+          renderContentThemeLightUrl: 'javascript:alert(1)',
+          renderContentThemeLightClass: 'valid bad.class',
+        }),
+      ),
+    ).toMatchObject({
+      renderContentThemeLight: 'light',
+      renderContentThemeLightUrl: '',
+      renderContentThemeLightClass: 'markdown-body',
     })
   })
 })
