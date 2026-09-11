@@ -181,4 +181,39 @@ class GithubWikiMarkdownConverterTest {
             "a\n\nb\n", key -> null);
         assertThat(conversion.markdown()).isEqualTo("a\n\nb\n");
     }
+
+    @Test
+    void convertsRelativeMdLinksCaseInsensitively() {
+        // GitHub 编辑器生成的普通相对链接：目标大小写与文件名不一致时也能解析。
+        var conversion = GithubWikiMarkdownConverter.convertLinks(
+            "See [介绍](getting-started.md) and [指南](./API-Guide.md#tips).",
+            key -> {
+                if ("getting-started".equals(key)) {
+                    return "getting-started";
+                }
+                return "api-guide".equals(key) ? "api-guide" : null;
+            });
+        assertThat(conversion.markdown())
+            .isEqualTo("See [介绍](./getting-started) and [指南](./api-guide#tips).");
+        assertThat(conversion.unresolvedLinks()).isZero();
+    }
+
+    @Test
+    void keepsUnknownMdLinksAndExternalLinksUntouched() {
+        var conversion = GithubWikiMarkdownConverter.convertLinks(
+            "[缺失](Missing-Page.md)、[外链](https://example.com/a.md)、"
+                + "[子目录](docs/sub/page.md)、[无扩展名](plain)",
+            key -> null);
+        assertThat(conversion.markdown())
+            .isEqualTo("[缺失](Missing-Page.md)、[外链](https://example.com/a.md)、"
+                + "[子目录](docs/sub/page.md)、[无扩展名](plain)");
+    }
+
+    @Test
+    void keepsMdImagesUntouched() {
+        var conversion = GithubWikiMarkdownConverter.convertLinks(
+            "![截图](screenshot.md)",
+            key -> "screenshot".equals(key) ? "screenshot" : null);
+        assertThat(conversion.markdown()).isEqualTo("![截图](screenshot.md)");
+    }
 }

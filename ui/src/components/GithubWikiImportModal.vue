@@ -11,6 +11,7 @@ interface WikiImportReport {
   libraryName: string
   librarySlug: string
   imported: number
+  updated: number
   skipped: number
   slugAdjusted: number
   unresolvedLinks: number
@@ -172,8 +173,10 @@ function handleFinish() {
       <p class="text-sm">
         已导入到文档库
         <span class="font-medium">{{ report.librarySlug }}</span>
-        ，共
+        ，新建
         <span class="font-medium">{{ report.imported }}</span>
+        篇、更新
+        <span class="font-medium">{{ report.updated }}</span>
         篇文档。
       </p>
       <ul class="list-disc pl-5 text-sm text-gray-600">

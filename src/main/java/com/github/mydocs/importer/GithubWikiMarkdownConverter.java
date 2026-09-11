@@ -12,7 +12,9 @@ import java.util.regex.Pattern;
  *   <li>页面文件名 → 访问别名（slug）与同库短链接所需的页面名映射；</li>
  *   <li>Wiki 链接语法 {@code [[Page]]} / {@code [[Page|文字]]} / {@code [[Page#锚点]]}
  *       → my-docs 同库短链接 {@code [文字](./slug#锚点)}（由前台
- *       {@code DocDetailContentBuilder} 解析为 {@code /docs/{librarySlug}/{slug}}）。</li>
+ *       {@code DocDetailContentBuilder} 解析为 {@code /docs/{librarySlug}/{slug}}）；</li>
+ *   <li>指向库内页面的普通相对链接 {@code [文字](Page.md)} 同样按页面名大小写不敏感解析并转换，
+ *       修复 GitHub 端链接大小写与文件名不一致时导入后跳转失败的问题。</li>
  * </ul>
  * <p>锚点格式与 commonmark {@code heading-anchor} 扩展保持一致：
  * 先小写、ASCII 空格转连字符，再仅保留 Unicode 字母数字、下划线与连字符。</p>
@@ -27,6 +29,11 @@ public final class GithubWikiMarkdownConverter {
         Pattern.compile("\\[\\[([^\\[\\]|]+)(?:\\|((?:[^\\]]|\\](?!\\]))+))?\\]\\]");
     private static final Pattern EXTERNAL_LINK_PATTERN =
         Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.-]*:.*");
+    // 普通 Markdown 链接 [文字](目标)：目标不允许空白与括号，由 convertMdLink 再判定是否为
+    // 库内相对 .md 链接；图片 ![]() 在代码里按前导 ! 排除（Java 正则的 lookbehind 对
+    // 转义括号行为不稳定，不放在模式里）。
+    private static final Pattern MD_LINK_PATTERN =
+        Pattern.compile("\\[([^\\[\\]]+)\\]\\(([^()\\s]+)\\)");
     private static final Pattern FENCE_OPEN_PATTERN =
         Pattern.compile("^ {0,3}(`{3,}|~{3,}).*$");
     private static final int MAX_SLUG_LENGTH = 100;
@@ -178,7 +185,62 @@ public final class GithubWikiMarkdownConverter {
             last = matcher.end();
         }
         out.append(text.substring(last));
+        return replaceMdLinks(out.toString(), context);
+    }
+
+    /**
+     * 转换 Wiki 正文中指向其它页面的普通相对 Markdown 链接（GitHub 编辑器常生成
+     * {@code [文字](Page-Name.md)} 形式）。与 Wiki 链接一样经页面名大小写不敏感解析，
+     * 避免 GitHub 端大小写不一致导致导入后跳转失败；解析不到时保持原样。
+     */
+    private static String replaceMdLinks(String text, LinkContext context) {
+        Matcher matcher = MD_LINK_PATTERN.matcher(text);
+        StringBuilder out = new StringBuilder(text.length());
+        int last = 0;
+        while (matcher.find()) {
+            // 前一个字符为 ! 时是图片语法 ![]()，保持原样。
+            if (matcher.start() > 0 && text.charAt(matcher.start() - 1) == '!') {
+                continue;
+            }
+            out.append(text, last, matcher.start());
+            String converted = convertMdLink(matcher.group(1), matcher.group(2), context);
+            out.append(converted == null ? matcher.group() : converted);
+            last = matcher.end();
+        }
+        out.append(text.substring(last));
         return out.toString();
+    }
+
+    /**
+     * @return 同库短链接；目标不是库内相对 {@code .md} 页面链接或解析不到页面时返回 null（保持原样）
+     */
+    private static String convertMdLink(String display, String target, LinkContext context) {
+        String trimmedTarget = target.trim();
+        if (EXTERNAL_LINK_PATTERN.matcher(trimmedTarget).matches()) {
+            return null;
+        }
+        int hashIndex = trimmedTarget.indexOf('#');
+        String path = hashIndex >= 0 ? trimmedTarget.substring(0, hashIndex) : trimmedTarget;
+        String anchor = hashIndex >= 0 ? trimmedTarget.substring(hashIndex + 1) : null;
+        if (path.startsWith("./")) {
+            path = path.substring(2);
+        }
+        // 仅处理指向当前 Wiki 内页面的链接；目录路径、绝对路径、非 .md 目标一律不动。
+        if (path.isEmpty() || path.contains("/") || !path.endsWith(".md")) {
+            return null;
+        }
+        String pageName = path.substring(0, path.length() - 3);
+        String slug = context.pageSlugLookup.apply(normalizePageKey(pageName));
+        if (slug == null) {
+            return null;
+        }
+        String displayText = display == null || display.isBlank() ? pageName : display;
+        StringBuilder link = new StringBuilder("[").append(escapeLabel(displayText.trim()))
+            .append("](./").append(slug);
+        if (anchor != null && !anchor.isBlank()) {
+            link.append('#').append(anchorSlug(anchor));
+        }
+        return link.append(')').toString();
     }
 
     private static String convertLink(String target, String display, LinkContext context) {

@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -33,7 +34,9 @@ import run.halo.app.extension.ReactiveExtensionClient;
  * <p>GitHub Wiki 导入执行器：把一组 Wiki Markdown 文件（来自仓库拉取或 zip 上传）转换并
  * 写入目标文档库。</p>
  * <p>执行流程：解析目标库（新建或已有）→ 预拉库内已有 slug 一次性去重 → 逐篇转换 Wiki 链接 →
- * 顺序创建 {@link Doc}（渲染与搜索索引由 {@code DocReconciler} 兜底）→ 汇总报告。</p>
+ * 顺序创建 / 更新 {@link Doc}（渲染与搜索索引由 {@code DocReconciler} 兜底）→ 汇总报告。
+ * 重复导入同一 Wiki 时，按别名或页面名（忽略大小写）匹配到的已有文档将被原地更新而非新建，
+ * 从而支持「从 Wiki 更新」。</p>
  *
  * @author tsdaer
  * @since 1.3.0
@@ -80,13 +83,36 @@ public class GithubWikiImporter {
                         "未在导入来源中找到任何可导入的 Wiki 页面。"));
                 }
                 var created = new AtomicInteger();
+                var updated = new AtomicInteger();
                 return Flux.fromIterable(preparation.getDocs())
-                    .concatMap(prepared -> client.create(
-                        buildDoc(prepared, libraryName, request.publish())))
-                    .doOnNext(doc -> created.incrementAndGet())
+                    .concatMap(prepared -> applyPrepared(prepared, libraryName,
+                        request.publish(), created, updated))
                     .then(Mono.defer(() -> Mono.just(buildReport(
-                        library, preparation, skippedOtherFiles, created.get()))));
+                        library, preparation, skippedOtherFiles,
+                        created.get(), updated.get()))));
             });
+    }
+
+    /**
+     * 已有文档走原地更新（标题、正文、发布状态），新文档走创建。
+     */
+    private Mono<Doc> applyPrepared(PreparedDoc prepared, String libraryName, boolean publish,
+        AtomicInteger created, AtomicInteger updated) {
+        Doc existing = prepared.getExisting();
+        if (existing == null) {
+            return client.create(buildDoc(prepared, libraryName, publish))
+                .doOnNext(doc -> created.incrementAndGet());
+        }
+        var spec = existing.getSpec();
+        spec.setTitle(prepared.getBaseName());
+        spec.setRaw(prepared.getMarkdown());
+        spec.setRawType("markdown");
+        spec.setPublished(publish);
+        if (publish && spec.getPublishTime() == null) {
+            spec.setPublishTime(Instant.now());
+        }
+        return client.update(existing)
+            .doOnNext(doc -> updated.incrementAndGet());
     }
 
     private Mono<DocLibrary> resolveTargetLibrary(GithubWikiImportRequest request) {
@@ -200,37 +226,76 @@ public class GithubWikiImporter {
             return String.CASE_INSENSITIVE_ORDER.compare(a, b);
         });
 
-        Map<String, String> slugByBase = new LinkedHashMap<>();
         Map<String, String> slugByPageKey = new LinkedHashMap<>();
+        // 已有文档按别名（小写）与页面名（规范化标题）两路索引，重复导入时优先匹配更新。
+        Map<String, Doc> existingBySlug = new LinkedHashMap<>();
+        Map<String, Doc> existingByTitleKey = new LinkedHashMap<>();
+        for (Doc existing : existingDocs) {
+            if (existing.getSpec() == null) {
+                continue;
+            }
+            var existingSpec = existing.getSpec();
+            if (StringUtils.hasText(existingSpec.getSlug())) {
+                existingBySlug.putIfAbsent(
+                    existingSpec.getSlug().toLowerCase(Locale.ROOT), existing);
+            }
+            if (StringUtils.hasText(existingSpec.getTitle())) {
+                existingByTitleKey.putIfAbsent(
+                    normalizePageKey(existingSpec.getTitle()), existing);
+            }
+        }
+        Set<Doc> matchedExisting = new HashSet<>();
         int slugAdjusted = 0;
+        Map<String, String> slugByBase = new LinkedHashMap<>();
+        Map<String, Doc> existingByBase = new LinkedHashMap<>();
         for (String baseName : pageNames) {
+            String pageKey = normalizePageKey(baseName);
             String candidate = slugify(baseName);
-            String finalSlug = candidate;
-            for (int i = 2; usedSlugs.contains(finalSlug); i++) {
-                finalSlug = candidate + "-" + i;
+            Doc existing = existingBySlug.get(candidate);
+            if (existing == null) {
+                existing = existingByTitleKey.get(pageKey);
+            }
+            if (existing != null && !matchedExisting.add(existing)) {
+                // 同一篇已有文档不重复匹配多个页面，后续页面按新建处理。
+                existing = null;
+            }
+            String finalSlug;
+            if (existing != null) {
+                // 更新已有文档：沿用其原别名，不参与新建去重。
+                finalSlug = existing.getSpec().getSlug();
+            } else {
+                finalSlug = candidate;
+                for (int i = 2; usedSlugs.contains(finalSlug); i++) {
+                    finalSlug = candidate + "-" + i;
+                }
+                usedSlugs.add(finalSlug);
             }
             if (!finalSlug.equals(candidate)) {
                 slugAdjusted++;
             }
-            usedSlugs.add(finalSlug);
-            slugByBase.put(baseName, finalSlug);
-            String pageKey = normalizePageKey(baseName);
             if (slugByPageKey.containsKey(pageKey)) {
                 warnings.add("页面名冲突（忽略大小写与空格/连字符差异）：“"
                     + baseName + "”的链接将指向先前的同名页面。");
             } else {
                 slugByPageKey.put(pageKey, finalSlug);
             }
+            slugByBase.put(baseName, finalSlug);
+            existingByBase.put(baseName, existing);
         }
 
+        // 链接转换放在别名分配之后，保证所有页面（含排在前面的页面）都能解析到后续页面。
         List<PreparedDoc> docs = new ArrayList<>(pageNames.size());
         int unresolvedLinks = 0;
         int priority = priorityStart;
         for (String baseName : pageNames) {
+            Doc existing = existingByBase.get(baseName);
             var conversion = convertLinks(wikiFiles.get(baseName), slugByPageKey::get);
             unresolvedLinks += conversion.unresolvedLinks();
+            int docPriority = existing != null
+                ? Objects.requireNonNullElse(existing.getSpec().getPriority(), priority)
+                : priority++;
             docs.add(new PreparedDoc(baseName, slugByBase.get(baseName),
-                conversion.markdown(), priority++));
+                conversion.markdown(), docPriority, existing));
         }
         return new Preparation(docs, specialFiles, slugAdjusted, unresolvedLinks, warnings);
     }
@@ -254,7 +319,7 @@ public class GithubWikiImporter {
     }
 
     private GithubWikiImportReport buildReport(DocLibrary library, Preparation preparation,
-        int skippedOtherFiles, int imported) {
+        int skippedOtherFiles, int imported, int updated) {
         var warnings = new ArrayList<String>(preparation.getWarnings());
         if (preparation.getUnresolvedLinks() > 0) {
             warnings.add("有 " + preparation.getUnresolvedLinks()
@@ -264,6 +329,7 @@ public class GithubWikiImporter {
             library.getMetadata().getName(),
             library.getSpec().getSlug(),
             imported,
+            updated,
             preparation.getSpecialFiles() + skippedOtherFiles,
             preparation.getSlugAdjusted(),
             preparation.getUnresolvedLinks(),
@@ -283,7 +349,7 @@ public class GithubWikiImporter {
     }
 
     /**
-     * 单篇待导入文档。
+     * 单篇待导入文档；{@code existing} 非空表示匹配到库内已有文档，导入时原地更新。
      */
     @Value
     private static class PreparedDoc {
@@ -291,5 +357,6 @@ public class GithubWikiImporter {
         String slug;
         String markdown;
         int priority;
+        Doc existing;
     }
 }
