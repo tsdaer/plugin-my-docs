@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
+import RiDownloadCloud2Line from '~icons/ri/download-cloud-2-line'
 import { DocV1alpha1Api, DocLibraryV1alpha1Api } from '@/api/generated'
 import type { Doc } from '@/api/generated'
 import {
@@ -17,6 +18,7 @@ import {
   type DropZone,
 } from '@/utils/doc-tree'
 import DocTreeNodeComp from '@/components/DocTreeNode.vue'
+import GithubWikiImportModal from '@/components/GithubWikiImportModal.vue'
 
 const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 // 树需要全量节点才能组装，暂不分页；超出上限记录并提示。
@@ -44,6 +46,8 @@ const expanded = ref<Set<string>>(new Set())
 const draggingName = ref('')
 const overName = ref('')
 const overZone = ref<'' | DropZone>('')
+
+const importModalVisible = ref(false)
 
 const { data: library } = useQuery({
   queryKey: ['doc-library', libraryName],
@@ -236,6 +240,12 @@ async function persistPositions() {
         </template>
         新建文档
       </VButton>
+      <VButton type="secondary" @click="importModalVisible = true">
+        <template #icon>
+          <RiDownloadCloud2Line />
+        </template>
+        导入 Wiki
+      </VButton>
     </template>
   </VPageHeader>
 
@@ -273,4 +283,10 @@ async function persistPositions() {
       </div>
     </VCard>
   </div>
+
+  <GithubWikiImportModal
+    v-if="importModalVisible"
+    :library="library"
+    @close="importModalVisible = false"
+  />
 </template>

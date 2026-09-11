@@ -23,6 +23,12 @@ dependencies {
     implementation 'org.commonmark:commonmark-ext-heading-anchor:0.24.0'
     implementation 'org.commonmark:commonmark-ext-footnotes:0.24.0'
 
+    // GitHub Wiki 仓库拉取（浅克隆 .wiki.git，打包进插件 jar）。
+    // slf4j-api 由 Halo 运行时提供，不打进插件 jar，避免与宿主日志实现冲突。
+    implementation('org.eclipse.jgit:org.eclipse.jgit:7.3.0.202506031305-r') {
+        exclude group: 'org.slf4j'
+    }
+
     testImplementation 'run.halo.app:api'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

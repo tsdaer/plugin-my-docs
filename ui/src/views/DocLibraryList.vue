@@ -22,9 +22,11 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { axiosInstance } from '@halo-dev/api-client'
 import RiBook2Line from '~icons/ri/book-2-line'
 import RiImageLine from '~icons/ri/image-line'
+import RiDownloadCloud2Line from '~icons/ri/download-cloud-2-line'
 import { DocLibraryV1alpha1Api } from '@/api/generated'
 import type { DocLibrary } from '@/api/generated'
 import DocLibraryEditingModal from '@/components/DocLibraryEditingModal.vue'
+import GithubWikiImportModal from '@/components/GithubWikiImportModal.vue'
 
 const api = new DocLibraryV1alpha1Api(undefined, '', axiosInstance)
 const queryClient = useQueryClient()
@@ -35,6 +37,9 @@ const size = ref(20)
 
 const editingModalVisible = ref(false)
 const selectedLibrary = ref<DocLibrary>()
+
+const importModalVisible = ref(false)
+const importTargetLibrary = ref<DocLibrary>()
 
 const { data, isLoading } = useQuery({
   queryKey: ['doc-libraries', page, size],
@@ -67,6 +72,16 @@ function handleCloseModal() {
   selectedLibrary.value = undefined
 }
 
+function handleOpenImport(library?: DocLibrary) {
+  importTargetLibrary.value = library
+  importModalVisible.value = true
+}
+
+function handleCloseImportModal() {
+  importModalVisible.value = false
+  importTargetLibrary.value = undefined
+}
+
 function handleDelete(library: DocLibrary) {
   Dialog.warning({
     title: '确定要删除该文档库吗？',
@@ -92,6 +107,12 @@ function handleDelete(library: DocLibrary) {
           <IconAddCircle />
         </template>
         新建文档库
+      </VButton>
+      <VButton type="secondary" @click="handleOpenImport()">
+        <template #icon>
+          <RiDownloadCloud2Line />
+        </template>
+        导入 Wiki
       </VButton>
       <VButton @click="router.push({ name: 'DocSettings' })">
         <template #icon>
@@ -172,6 +193,7 @@ function handleDelete(library: DocLibrary) {
             </template>
             <template #dropdownItems>
               <VDropdownItem @click="handleManageDocs(library)">管理文档</VDropdownItem>
+              <VDropdownItem @click="handleOpenImport(library)">导入 Wiki</VDropdownItem>
               <VDropdownItem @click="handleOpenEdit(library)">编辑</VDropdownItem>
               <VDropdownItem type="danger" @click="handleDelete(library)">
                 删除
@@ -197,6 +219,12 @@ function handleDelete(library: DocLibrary) {
     v-if="editingModalVisible"
     :library="selectedLibrary"
     @close="handleCloseModal"
+  />
+
+  <GithubWikiImportModal
+    v-if="importModalVisible"
+    :library="importTargetLibrary"
+    @close="handleCloseImportModal"
   />
 </template>
 
