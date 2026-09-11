@@ -38,6 +38,12 @@ test {
     useJUnitPlatform()
 }
 
+tasks.named('jar') {
+    // JGit 等依赖为签名 jar，签名文件合并进 fat jar 后摘要必然失配，
+    // 导致插件加载时报 Invalid signature file digest，需从产物中剔除。
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', 'META-INF/*.EC'
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
