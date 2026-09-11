@@ -224,6 +224,50 @@ Markdown 编辑器组件——`@halo-dev/components` 仅导出 `VCodemirror`（�
       `./gradlew build` 成功，产物为 `build/libs/plugin-my-docs-1.2.0.jar`）
 - [ ] （可选）提交至 Halo 应用市场
 
+### M6 — GitHub Wiki 导入与优化修复（1.3.0）
+
+- [x] **GitHub Wiki 导入（双通道）**：GitHub 未提供 Wiki 读取 API，Wiki 本身是独立 git
+      仓库（`{repo}.wiki.git`），因此提供两种来源，汇入同一转换管道：
+      - 仓库地址拉取：`GithubWikiRepositoryFetcher` 用 JGit（7.3.0，slf4j 排除由宿主提供）
+        浅克隆到临时目录（depth=1，120s 超时，私有 Wiki 走 PAT），阻塞操作调度到
+        boundedElastic；clone 失败按 404 / 无权限 / 网络错误映射为中文提示
+      - zip 上传：`GithubWikiZipReader` 解析 clone 后打包的压缩包，含 ZipSlip 路径穿越
+        防护（拒绝 `..`、绝对路径、盘符）、`__MACOSX` / `.git` 杂项过滤与解压上限
+        （单文件 5MB / 总量 20MB / 2000 条目）
+- [x] **Wiki 语法转换**（`GithubWikiMarkdownConverter`，纯函数）：文件名 → 标题 / slug
+      （小写、非字母数字折叠为连字符、保留中文、截断 100）；`[[Page]]` / `[[Page|文字]]` /
+      `[[Page#锚点]]` / `[[https://…]]` 转为 my-docs 同库短链接 `[文字](./slug#锚点)`，
+      复用现有 `./slug` 短链机制；锚点格式与 commonmark `heading-anchor` 扩展对齐
+      （单测与渲染器实际输出交叉验证）；围栏代码块与行内代码内的链接不转换；
+      未匹配页面降级纯文本并计入报告
+- [x] **导入执行**（`GithubWikiImporter`）：目标库二选一（新建：用户提供的 slug 冲突报错、
+      自动生成的前缀查询去重；已有：fetch 校验）；一次性预拉库内 slug 与最大 priority，
+      别名冲突自动追加 `-2/-3`，新文档 priority 续排在已有文档之后；`Home` 置顶、其余按
+      文件名排序、全部平铺；`_Sidebar/_Header/_Footer` 跳过；直接
+      `ReactiveExtensionClient.create`（渲染与搜索索引由 reconciler 兜底），顺序
+      `concatMap` 创建；返回导入报告（imported / skipped / slugAdjusted /
+      unresolvedLinks / warnings）
+- [x] **Console 端点与 RBAC**：`GithubWikiImportEndpoint`
+      （`console.api.my-docs.tsdaer.run/v1alpha1`）`POST /github-wiki-imports/repository`
+      （JSON）与 `POST /github-wiki-imports/zip`（multipart，20MB 上限）；manage 角色补
+      `github-wiki-imports` 资源规则
+- [x] **Console 入口与弹窗**：`GithubWikiImportModal.vue`（来源 Tab、PAT、目标库选择、
+      发布开关、结果报告与错误内联展示）；文档库列表页头部与行内菜单、文档管理页头部
+      三处入口
+- [x] **优化：DocEndpoint 校验加固**：PUT 校验路径 `{name}` 与 `metadata.name` 一致、
+      POST/PUT 校验 `spec.libraryName` 对应文档库存在，杜绝游离文档与错体更新
+- [x] **优化：DocReconciler 搜索事件去重**：以注解 `my-docs.tsdaer.run/search-sync` 记录
+      上次索引状态指纹（发布状态 + 库 slug + 正文 SHA-256），一致则跳过，插件重启
+      resync 不再全量重发；内容与注解合并为一次 update 避免版本冲突；顺带修复
+      文档删除后索引残留（fetch 不到时发布删除事件，旧注解自动迁移重索引一次）
+- [x] **优化：MarkdownRenderer 实例复用**：commonmark `Parser` / `HtmlRenderer` /
+      扩展实例线程安全，按 `(autolink, footnotes)` 组合缓存，前台每页视图不再重建
+- [x] 测试：转换器（链接各形态、锚点交叉验证、代码块跳过）、导入器（建库排序、去重续排、
+      页面名冲突警告）、zip 读取器（跳过杂项、重名、ZipSlip）、reconciler 去重与删除路径，
+      共 76 项后端单测通过；UI type-check / vitest / oxlint 通过
+
+参考：`server-security.md`（RBAC）、`docs/development.md`（扩展点，无新增）
+
 ## 4. 技术决策与风险
 
 | 项                | 决策 / 说明                                                                 |
@@ -240,6 +284,8 @@ Markdown 编辑器组件——`@halo-dev/components` 仅导出 `VCodemirror`（�
 | 风险：API 演进    | Extension / UI API 跨版本变化，实现时以官方文档为准，避免依赖记忆签名        |
 | 风险：目录树性能  | 大量文档时递归组装树可能慢，必要时限制层级或分页加载子节点                   |
 | 风险：锚点稳定性  | 标题改名会导致旧锚点失效；如后续需要稳定 permalink，可再评估显式 heading id 机制 |
+| Wiki 导入        | GitHub 无 Wiki API，走 JGit 浅克隆；服务器连不上 GitHub 时用 zip 上传兜底；JGit 约 +4MB jar，slf4j 排除避免与宿主日志实现冲突 |
+| 搜索索引时间戳   | `DocSearchDocumentConverter.updateTimestamp` 目前取 creationTimestamp：Halo Metadata 无 updateTimestamp 字段、无可靠数据源，维持现状 |
 
 ## 5. 参考资料
 
