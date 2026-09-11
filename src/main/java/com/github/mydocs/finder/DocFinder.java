@@ -14,6 +14,7 @@ import lombok.Value;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.Metadata;
@@ -86,8 +87,20 @@ public class DocFinder {
                     .build();
                 return client.listAll(Doc.class, options, PRIORITY_ASC)
                     .filter(DocFinder::isPublished)
-                    .next();
+                    .next()
+                    // 别名索引按原字符串精确匹配；Wiki 导入的别名全为小写，而正文里未经
+                    // 导入转换的原始链接（HTML 链接、无扩展名链接等）可能保留原大小写，
+                    // 精确匹配落空时退回大小写不敏感匹配，避免这类链接 404。
+                    .switchIfEmpty(listPublishedDocs(library.getMetadata().getName())
+                        .flatMapMany(Flux::fromIterable)
+                        .filter(doc -> slugEqualsIgnoreCase(doc, docSlug))
+                        .next());
             });
+    }
+
+    private static boolean slugEqualsIgnoreCase(Doc doc, String docSlug) {
+        var slug = spec(doc).getSlug();
+        return StringUtils.hasText(slug) && slug.equalsIgnoreCase(docSlug);
     }
 
     public Mono<List<DocTreeNode>> tree(String libraryName) {

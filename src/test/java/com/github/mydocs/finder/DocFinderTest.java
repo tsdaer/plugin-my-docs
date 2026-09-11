@@ -68,6 +68,35 @@ class DocFinderTest {
         assertThat(doc.getMetadata().getName()).isEqualTo("doc-1");
     }
 
+    @Test
+    void resolvesPublishedDocByDocSlugIgnoringCase() {
+        // 精确匹配（索引按原字符串比较）落空后，退回大小写不敏感匹配。
+        when(client.listAll(eq(DocLibrary.class), any(ListOptions.class), any(Sort.class)))
+            .thenReturn(Flux.just(library("lib-1", "guide", "Guide", 10)));
+        when(client.listAll(eq(Doc.class), any(ListOptions.class), any(Sort.class)))
+            .thenReturn(Flux.empty(), Flux.just(
+                doc("doc-1", "intro", "Intro", "lib-1", null, 10, true),
+                doc("doc-2", "setup-guide", "Setup", "lib-1", null, 20, true)));
+
+        var doc = new DocFinder(client).getPublishedDocBySlugs("guide", "Setup-Guide").block();
+
+        assertThat(doc).isNotNull();
+        assertThat(doc.getMetadata().getName()).isEqualTo("doc-2");
+    }
+
+    @Test
+    void caseInsensitiveLookupSkipsDrafts() {
+        when(client.listAll(eq(DocLibrary.class), any(ListOptions.class), any(Sort.class)))
+            .thenReturn(Flux.just(library("lib-1", "guide", "Guide", 10)));
+        when(client.listAll(eq(Doc.class), any(ListOptions.class), any(Sort.class)))
+            .thenReturn(Flux.empty(),
+                Flux.just(doc("doc-draft", "intro", "Intro", "lib-1", null, 10, false)));
+
+        var doc = new DocFinder(client).getPublishedDocBySlugs("guide", "INTRO").block();
+
+        assertThat(doc).isNull();
+    }
+
     private static DocLibrary library(String name, String slug, String title, Integer priority) {
         var library = new DocLibrary();
         var metadata = new Metadata();

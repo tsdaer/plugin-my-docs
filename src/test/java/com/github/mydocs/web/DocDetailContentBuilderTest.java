@@ -66,6 +66,33 @@ class DocDetailContentBuilderTest {
     }
 
     @Test
+    void stripsMdExtensionWhenRewritingSameLibraryLinks() {
+        // 未经导入转换的 .md / .markdown 链接（历史导入内容、HTML 链接等）指向的是
+        // 库内页面，重写为短链接时剥掉扩展名；其它扩展名与点开头文件保持原样。
+        var doc = new Doc();
+        var spec = new Doc.Spec();
+        spec.setContent("""
+            <p>
+              <a href="Page-Name.md">Page</a>
+              <a href="user-guide.markdown">Guide</a>
+              <a href="./FAQ.md#usage">FAQ</a>
+              <a href="logo.png">Logo</a>
+              <a href="folder/notes.md">Folder</a>
+            </p>
+            """);
+        doc.setSpec(spec);
+
+        var content = builder.build(library("guide"), doc).block();
+
+        assertThat(content.getHtml())
+            .contains("href=\"/docs/guide/Page-Name\"")
+            .contains("href=\"/docs/guide/user-guide\"")
+            .contains("href=\"/docs/guide/FAQ#usage\"")
+            .contains("href=\"/docs/guide/logo.png\"")
+            .contains("href=\"folder/notes.md\"");
+    }
+
+    @Test
     void returnsEmptyDetailContentForBlankHtml() {
         var doc = new Doc();
         var spec = new Doc.Spec();

@@ -6,6 +6,7 @@ import com.github.mydocs.extensionpoint.DocContentHandlerChain;
 import com.github.mydocs.service.MarkdownRenderer;
 import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 import lombok.Value;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -124,6 +125,7 @@ public class DocDetailContentBuilder {
         if (!StringUtils.hasText(normalizedPath) || normalizedPath.contains("/")) {
             return null;
         }
+        normalizedPath = stripPageExtension(normalizedPath);
 
         StringBuilder builder = new StringBuilder("/docs/")
             .append(librarySlug)
@@ -133,6 +135,23 @@ public class DocDetailContentBuilder {
             builder.append("#").append(uri.getFragment());
         }
         return builder.toString();
+    }
+
+    /**
+     * Wiki 正文里未经导入转换的 {@code .md} / {@code .markdown} 链接（历史导入内容、
+     * HTML 链接、导入器未覆盖的写法）指向的是页面而非静态文件，剥掉扩展名后再按页面
+     * 别名解析为库内短链接。
+     */
+    private static String stripPageExtension(String path) {
+        int dotIndex = path.lastIndexOf('.');
+        if (dotIndex <= 0) {
+            return path;
+        }
+        var extension = path.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+        if (extension.equals("md") || extension.equals("markdown")) {
+            return path.substring(0, dotIndex);
+        }
+        return path;
     }
 
     private static int headingLevel(Element element) {
