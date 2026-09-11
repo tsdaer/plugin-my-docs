@@ -1,7 +1,9 @@
 package com.github.mydocs.reconciler;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import run.halo.app.extension.ExtensionClient;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.controller.Reconciler;
+import run.halo.app.search.event.HaloDocumentAddRequestEvent;
+import run.halo.app.search.event.HaloDocumentDeleteRequestEvent;
 
 @ExtendWith(MockitoExtension.class)
 class DocReconcilerTest {
@@ -61,7 +65,7 @@ class DocReconcilerTest {
 
         var captor = ArgumentCaptor.forClass(Doc.class);
         verify(client).update(captor.capture());
-        org.assertj.core.api.Assertions.assertThat(captor.getValue().getSpec().getContent())
+        assertThat(captor.getValue().getSpec().getContent())
             .contains("<h1").contains("Hello");
     }
 
@@ -85,17 +89,53 @@ class DocReconcilerTest {
 
         newReconciler().reconcile(new Reconciler.Request("doc-1"));
 
-        verify(eventPublisher).publishEvent(
-            any(run.halo.app.search.event.HaloDocumentAddRequestEvent.class));
+        verify(eventPublisher).publishEvent(any(HaloDocumentAddRequestEvent.class));
     }
 
     @Test
-    void doesNothingWhenDocNotFound() {
+    void skipsSearchEventWhenSyncSignatureUnchanged() {
+        var doc = docWith("# Hello", markdownRenderer.render("# Hello"));
+        doc.getSpec().setPublished(true);
+        when(client.fetch(Doc.class, "doc-1")).thenReturn(Optional.of(doc));
+        when(client.fetch(DocLibrary.class, "lib")).thenReturn(Optional.of(library("lib", "guide")));
+
+        var reconciler = newReconciler();
+        reconciler.reconcile(new Reconciler.Request("doc-1"));
+        // 第二次 reconcile：content 已一致，同步注解已写入，不应再发事件或更新。
+        reconciler.reconcile(new Reconciler.Request("doc-1"));
+
+        verify(eventPublisher, times(1)).publishEvent(any(HaloDocumentAddRequestEvent.class));
+        verify(client, times(1)).update(any());
+    }
+
+    @Test
+    void publishesSearchDeleteEventWhenDocUnpublishedAfterSync() {
+        var doc = docWith("# Hello", markdownRenderer.render("# Hello"));
+        doc.getSpec().setPublished(true);
+        when(client.fetch(Doc.class, "doc-1")).thenReturn(Optional.of(doc));
+        when(client.fetch(DocLibrary.class, "lib")).thenReturn(Optional.of(library("lib", "guide")));
+
+        var reconciler = newReconciler();
+        reconciler.reconcile(new Reconciler.Request("doc-1"));
+
+        doc.getSpec().setPublished(false);
+        reconciler.reconcile(new Reconciler.Request("doc-1"));
+
+        verify(eventPublisher, times(1)).publishEvent(any(HaloDocumentDeleteRequestEvent.class));
+        assertThat(doc.getMetadata().getAnnotations())
+            .doesNotContainKey(DocReconciler.SEARCH_SYNC_ANNOTATION);
+    }
+
+    @Test
+    void publishesSearchDeleteEventWhenDocMissing() {
         when(client.fetch(Doc.class, "missing")).thenReturn(Optional.empty());
 
         newReconciler().reconcile(new Reconciler.Request("missing"));
 
-        verify(client, never()).update(any());
+        var captor = ArgumentCaptor.forClass(HaloDocumentDeleteRequestEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().getDocIds())
+            .containsExactly("doc.my-docs.tsdaer.run/missing");
     }
 
     private static DocLibrary library(String name, String slug) {

@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.commonmark.Extension;
 import org.commonmark.ext.autolink.AutolinkExtension;
@@ -48,6 +49,11 @@ import com.github.mydocs.web.DocIndexSettings;
  */
 @Component
 public class MarkdownRenderer {
+
+    /**
+     * 按 RenderOptions 中影响解析器构建的组合（autolink / footnotes）缓存的引擎实例。
+     */
+    private final Map<String, RenderEngine> engines = new ConcurrentHashMap<>();
 
     private static final String IMAGE_WIDTH_PARAM = "md-width";
     private static final String IMAGE_ALIGN_PARAM = "md-align";
@@ -99,26 +105,43 @@ public class MarkdownRenderer {
         if (!StringUtils.hasText(markdown)) {
             return "";
         }
-        List<Extension> extensions = new ArrayList<>(List.of(
-            TablesExtension.create(),
-            TaskListItemsExtension.create(),
-            StrikethroughExtension.create(),
-            HeadingAnchorExtension.create()
-        ));
-        if (options.gfmAutoLink()) {
-            extensions.add(AutolinkExtension.create());
-        }
-        if (options.footnotes()) {
-            extensions.add(FootnotesExtension.create());
-        }
-        Parser parser = Parser.builder().extensions(extensions).build();
-        HtmlRenderer htmlRenderer = HtmlRenderer.builder()
-            .extensions(extensions)
-            .nodeRendererFactory(MarkdownHtmlNodeRenderer::new)
-            .build();
+        var engine = engineFor(options);
         markdown = normalizeMathBlocks(markdown);
-        Node document = parser.parse(markdown);
-        return enhanceHtml(htmlRenderer.render(document), options);
+        Node document = engine.parser().parse(markdown);
+        return enhanceHtml(engine.htmlRenderer().render(document), options);
+    }
+
+    /**
+     * commonmark 的 {@link Parser} / {@link HtmlRenderer} 与扩展实例线程安全、可复用；
+     * 按 {@code RenderOptions} 中影响解析器构建的组合（autolink / footnotes）缓存，
+     * 避免前台每次页面视图都重建实例。
+     */
+    private RenderEngine engineFor(RenderOptions options) {
+        boolean autoLink = options.gfmAutoLink();
+        boolean footnotes = options.footnotes();
+        return engines.computeIfAbsent(Boolean.toString(autoLink) + footnotes, key -> {
+            List<Extension> extensions = new ArrayList<>(List.of(
+                TablesExtension.create(),
+                TaskListItemsExtension.create(),
+                StrikethroughExtension.create(),
+                HeadingAnchorExtension.create()
+            ));
+            if (autoLink) {
+                extensions.add(AutolinkExtension.create());
+            }
+            if (footnotes) {
+                extensions.add(FootnotesExtension.create());
+            }
+            Parser parser = Parser.builder().extensions(extensions).build();
+            HtmlRenderer htmlRenderer = HtmlRenderer.builder()
+                .extensions(extensions)
+                .nodeRendererFactory(MarkdownHtmlNodeRenderer::new)
+                .build();
+            return new RenderEngine(parser, htmlRenderer);
+        });
+    }
+
+    private record RenderEngine(Parser parser, HtmlRenderer htmlRenderer) {
     }
 
     public String enhanceHtml(String html, RenderOptions options) {
