@@ -2,6 +2,7 @@ package com.github.mydocs.web;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
@@ -68,6 +71,9 @@ public class MediaProxyService {
     private static final long IN_MEMORY_LIMIT = 8L * 1024 * 1024;
 
     private static final int BUFFER_SIZE = 64 * 1024;
+
+    /** 上游错误文档最多读这么长，够提出 Code/Message 即可。 */
+    private static final long MAX_ERROR_SNIPPET = 8 * 1024;
 
     private final WebClient webClient;
 
@@ -229,6 +235,11 @@ public class MediaProxyService {
                     .getFirst(HttpHeaders.CONTENT_TYPE);
                 String resolvedType = MediaTypePolicy.resolve(upstreamType, target.toString());
                 if (resolvedType == null) {
+                    if (MediaTypePolicy.isXml(upstreamType)) {
+                        // 对象存储的鉴权/找不到对象错误都是 XML 文档，报「415 类型不允许」
+                        // 会把人引到类型上，实际原因在响应体里，读出来带上。
+                        return readUpstreamError(response, status, target);
+                    }
                     response.releaseBody().subscribe();
                     log.warn("媒体代理拒绝上游内容类型：type={} source={}", upstreamType, target);
                     return Mono.error(new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
@@ -316,8 +327,61 @@ public class MediaProxyService {
         });
     }
 
-    private static void deleteQuietly(Path path) {
-        try {
+    /**
+     * 读一小段上游的错误文档，把 S3 的 {@code <Code>} / {@code <Message>} 提出来。
+     *
+     * <p>对象存储的鉴权失败、对象不存在都回 XML，只看 Content-Type 会误判成「类型不允许」。
+     * 限制读取长度，避免为了报错把一个大响应拉下来。</p>
+     */
+    private Mono<UpstreamResponse> readUpstreamError(ClientResponse response, HttpStatus status,
+        URI target) {
+        long limit = MAX_ERROR_SNIPPET;
+        return DataBufferUtils.join(response.bodyToFlux(DataBuffer.class)
+                .takeWhile(buffer -> buffer.readableByteCount() <= limit)
+                .take(4))
+            .<UpstreamResponse>map(joined -> {
+                byte[] bytes = new byte[joined.readableByteCount()];
+                joined.read(bytes);
+                DataBufferUtils.release(joined);
+                String snippet = new String(bytes, StandardCharsets.UTF_8);
+                log.warn("媒体代理上游返回错误文档：status={} source={} body={}", status, target,
+                    snippet.replaceAll("\\s+", " ").trim());
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    describeUpstreamError(status, snippet));
+            })
+            .switchIfEmpty(Mono.<UpstreamResponse>fromSupplier(() -> {
+                log.warn("媒体代理上游返回错误文档（空响应）：status={} source={}", status, target);
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "上游返回 " + status.value() + "，响应体为空");
+            }));
+    }
+
+    /** 从 S3 风格的 XML 里取 Code/Message，取不到就退回状态码。 */
+    static String describeUpstreamError(HttpStatus status, String body) {
+        String code = extractXmlTag(body, "Code");
+        String message = extractXmlTag(body, "Message");
+        if (StringUtils.hasText(code) && StringUtils.hasText(message)) {
+            return "上游拒绝：" + status.value() + " " + code + " - " + message;
+        }
+        if (StringUtils.hasText(code)) {
+            return "上游拒绝：" + status.value() + " " + code;
+        }
+        String compact = body == null ? "" : body.replaceAll("\\s+", " ").trim();
+        if (!StringUtils.hasText(compact)) {
+            return "上游返回 " + status.value() + "，响应体为空";
+        }
+        return "上游返回 " + status.value() + "：" + compact.substring(0, Math.min(160, compact.length()));
+    }
+
+    private static String extractXmlTag(String body, String tag) {
+        if (!StringUtils.hasText(body)) {
+            return null;
+        }
+        var matcher = Pattern.compile("<" + tag + ">([^<]{0,200})</" + tag + ">").matcher(body);
+        return matcher.find() ? matcher.group(1).trim() : null;
+    }
+
+    private static void deleteQuietly(Path path) {        try {
             Files.deleteIfExists(path);
         } catch (IOException exception) {
             log.warn("清理媒体代理临时文件失败：{}", path, exception);
@@ -445,4 +509,5 @@ public class MediaProxyService {
     public record ProxiedMedia(HttpStatus status, HttpHeaders headers, ProxiedBody body) {
     }
 }
+
 

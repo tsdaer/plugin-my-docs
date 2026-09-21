@@ -115,6 +115,21 @@ final class MediaTypePolicy {
         }
     }
 
+    /** 上游给的是 XML：多半是对象存储的错误文档，而不是真的想回一个 XML 媒体。 */
+    static boolean isXml(String contentType) {
+        if (!StringUtils.hasText(contentType)) {
+            return false;
+        }
+        try {
+            var mediaType = MediaType.parseMediaType(contentType);
+            String type = mediaType.getType().toLowerCase(Locale.ROOT) + "/"
+                + mediaType.getSubtype().toLowerCase(Locale.ROOT);
+            return type.equals("application/xml") || type.equals("text/xml");
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     /** 扩展名兜底放行时，浏览器是否必须按附件下载而不能内联展示。 */
     static boolean needsAttachmentDisposition(String sourceUrl) {
         String extension = extensionOf(sourceUrl);
@@ -151,3 +166,4 @@ final class MediaTypePolicy {
         return path.substring(dot + 1).toLowerCase(Locale.ROOT);
     }
 }
+
