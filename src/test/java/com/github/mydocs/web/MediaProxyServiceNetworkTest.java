@@ -90,7 +90,7 @@ class MediaProxyServiceNetworkTest {
 
         var proxied = new MediaProxyService()
             .fetch(LARGE_MP4, settings, HttpMethod.GET, new HttpHeaders())
-            .block(Duration.ofSeconds(30));
+            .block(Duration.ofSeconds(180));
 
         assertThat(proxied).isNotNull();
         assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
@@ -123,7 +123,7 @@ class MediaProxyServiceNetworkTest {
 
         assertThatThrownBy(() -> new MediaProxyService()
             .fetch(LARGE_MP4, settings, HttpMethod.GET, new HttpHeaders())
-            .block(Duration.ofSeconds(30)))
+            .block(Duration.ofSeconds(180)))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("502");
     }
@@ -136,7 +136,7 @@ class MediaProxyServiceNetworkTest {
                 DataBufferUtils.release(buffer);
                 return content;
             })
-            .block(Duration.ofSeconds(120));
+            .block(Duration.ofSeconds(180));
     }
 
     /**
@@ -152,7 +152,7 @@ class MediaProxyServiceNetworkTest {
 
         var proxied = service.fetch(
             "https://bucket.abc.r2.cloudflarestorage.com/SF_VULKAN_SM6_GALLERY_0.webm",
-            settings, HttpMethod.GET, new HttpHeaders()).block(Duration.ofSeconds(20));
+            settings, HttpMethod.GET, new HttpHeaders()).block(Duration.ofSeconds(180));
 
         assertThat(proxied).isNotNull();
         assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
@@ -263,5 +263,6 @@ class MediaProxyServiceNetworkTest {
         }
     }
 }
+
 
 

@@ -50,8 +50,14 @@ metadata:
     halo.run/hidden: "true"
     rbac.authorization.halo.run/aggregate-to-anonymous: "true"
 rules:
+  # 注意：Halo 会把 /apis/{group}/{version}/{资源} 这种路径判成「资源请求」
+  # （见 RequestInfoFactory），nonResourceURLs 规则对这些端点不生效，
+  # 必须把资源名逐个写进 resources，否则匿名访客会被重定向到登录页。
+  # 新增公开端点时同步加到这里，PublicEndpointRoleTest 会盯着这一点。
   - apiGroups: ["api.my-docs.tsdaer.run"]
-    resources: ["libraries", "docs", "trees"]
+    resources: ["libraries", "docs", "trees", "media-proxy"]
     verbs: ["get", "list"]
   - nonResourceURLs: ["/apis/api.my-docs.tsdaer.run/v1alpha1/**"]
     verbs: ["get"]
+
+
