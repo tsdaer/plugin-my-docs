@@ -53,6 +53,12 @@ public class DocIndexSettings {
 
     private Boolean renderMathBlockPreview = true;
 
+    private Boolean renderCopyButtons = true;
+
+    private Boolean renderImageZoom = true;
+
+    private Boolean renderMediaEmbed = true;
+
     // 仅用于读取旧版 ConfigMap，规范化后不再写入模板模型。
     private String renderContentTheme;
 

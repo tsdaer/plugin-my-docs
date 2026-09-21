@@ -1,0 +1,267 @@
+/* my-docs 前台正文增强：复制按钮 / 图片灯箱 / 内嵌视频 / 图表容器。
+   颜色全部引用 modules/theme.html 注入的 --mdocs-* 变量，随明暗模式自动适配。 */
+
+/* ---------- 复制按钮挂载容器 ---------- */
+.mdocs-content pre.mdocs-code,
+.mdocs-content .mdocs-chart,
+.mdocs-content .mdocs-media,
+.mdocs-content .mdocs-math {
+  position: relative;
+}
+
+.mdocs-content .mdocs-media {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.mdocs-content .mdocs-media > img {
+  display: block;
+}
+
+.mdocs-content .mdocs-math {
+  display: block;
+  margin: 1em 0;
+  text-align: center;
+}
+
+.mdocs-content img.mdocs-zoomable {
+  cursor: zoom-in;
+}
+
+/* ---------- 复制按钮 ---------- */
+.mdocs-action-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--mdocs-border);
+  border-radius: 7px;
+  background: var(--mdocs-surface);
+  color: var(--mdocs-muted);
+  cursor: pointer;
+  opacity: 0;
+  box-shadow: 0 2px 8px rgba(2, 6, 23, 0.14);
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.mdocs-action-btn svg {
+  width: 15px;
+  height: 15px;
+  pointer-events: none;
+}
+
+.mdocs-action-btn .mdocs-icon-check {
+  display: none;
+}
+
+.mdocs-action-btn:hover {
+  color: var(--mdocs-accent);
+  border-color: var(--mdocs-accent);
+}
+
+.mdocs-action-btn:focus-visible,
+.mdocs-action-btn.is-success {
+  opacity: 1;
+}
+
+.mdocs-action-btn.is-success {
+  color: #16a34a;
+  border-color: #16a34a;
+}
+
+.mdocs-action-btn.is-success .mdocs-icon-copy {
+  display: none;
+}
+
+.mdocs-action-btn.is-success .mdocs-icon-check {
+  display: block;
+}
+
+.mdocs-content pre.mdocs-code:hover .mdocs-action-btn,
+.mdocs-content .mdocs-media:hover .mdocs-action-btn,
+.mdocs-content .mdocs-math:hover .mdocs-action-btn {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .mdocs-action-btn {
+    opacity: 0.85;
+  }
+}
+
+/* ---------- 图片灯箱 ---------- */
+.mdocs-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 99990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: rgba(8, 12, 20, 0.88);
+  animation: mdocs-lightbox-in 0.18s ease;
+  cursor: zoom-out;
+}
+
+.mdocs-lightbox-image {
+  max-width: 92vw;
+  max-height: 88vh;
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+
+.mdocs-lightbox.is-loading .mdocs-lightbox-image {
+  visibility: hidden;
+}
+
+.mdocs-lightbox.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 3px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #f8fafc;
+  border-radius: 50%;
+  animation: mdocs-lightbox-spin 0.8s linear infinite;
+}
+
+.mdocs-lightbox.is-error .mdocs-lightbox-image {
+  display: none;
+}
+
+.mdocs-lightbox.is-error::after {
+  content: "图片加载失败";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(248, 250, 252, 0.8);
+  font-size: 14px;
+}
+
+.mdocs-lightbox-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(248, 250, 252, 0.25);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.55);
+  color: #f8fafc;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mdocs-lightbox-close:hover {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(248, 250, 252, 0.55);
+}
+
+.mdocs-lightbox-close svg {
+  width: 17px;
+  height: 17px;
+}
+
+body.mdocs-lightbox-open {
+  overflow: hidden;
+}
+
+@keyframes mdocs-lightbox-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes mdocs-lightbox-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- 内嵌视频（原生兜底 + DPlayer） ---------- */
+.mdocs-content .mdocs-video,
+.mdocs-content .mdocs-dplayer {
+  display: block;
+  max-width: 100%;
+  border-radius: 10px;
+  background: #000;
+  box-shadow: var(--mdocs-shadow);
+}
+
+.mdocs-content .mdocs-video {
+  width: 100%;
+  height: auto;
+}
+
+.mdocs-content .mdocs-dplayer {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+}
+
+/* ---------- 图表容器 ---------- */
+.mdocs-content .mdocs-chart {
+  margin: 1em 0;
+}
+
+.mdocs-content .mdocs-chart svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 图表渲染后 pre 只是外壳，剥离代码块底色/边距，避免亮色页面出现深色块。 */
+.mdocs-content .mdocs-chart > pre {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible;
+}
+
+/* Vditor 不为 ECharts/mindmap 容器设置高度，且 code 默认 inline 不占盒，
+   缺省样式兜底（否则 init 出的 canvas 宽高为 0，图表不可见）。 */
+.mdocs-content .mdocs-chart[data-mdocs-chart="echarts"] .language-echarts,
+.mdocs-content .mdocs-chart[data-mdocs-chart="mindmap"] .language-mindmap {
+  display: block;
+  height: 400px;
+}
+
+/* ---------- 轻提示 ---------- */
+.mdocs-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 36px;
+  z-index: 99999;
+  transform: translateX(-50%);
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f1f5f9;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.35);
+  animation: mdocs-toast-in 0.2s ease;
+}
+
+@keyframes mdocs-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}

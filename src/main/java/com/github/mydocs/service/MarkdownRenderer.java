@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -58,6 +59,13 @@ public class MarkdownRenderer {
     private static final String IMAGE_WIDTH_PARAM = "md-width";
     private static final String IMAGE_ALIGN_PARAM = "md-align";
     private static final String IMAGE_PADDING_PARAM = "md-pad";
+    /**
+     * 图片语法指向视频文件时改写为内嵌 video（前台再增强为 DPlayer），
+     * 覆盖浏览器可直接播放的格式与 HLS 清单。
+     */
+    private static final Set<String> VIDEO_EXTENSIONS = Set.of(
+        "mp4", "webm", "ogv", "ogg", "m4v", "mov", "m3u8"
+    );
     private static final Pattern CSS_LENGTH_PATTERN = Pattern.compile(
         "^(?:0|\\d+(?:\\.\\d+)?(?:px|rem|em|%)?)$"
     );
@@ -150,6 +158,9 @@ public class MarkdownRenderer {
         }
         Document document = Jsoup.parseBodyFragment(html);
         Element body = document.body();
+        if (options.mediaEmbed()) {
+            embedVideoElements(body);
+        }
         if (options.mark()) {
             replaceTextPattern(body, MARK_PATTERN, "mark");
         }
@@ -166,6 +177,58 @@ public class MarkdownRenderer {
                 .forEach(element -> element.addClass("mdocs-indent-2"));
         }
         return body.html();
+    }
+
+    /**
+     * 把图片语法引用的视频文件（{@code ![](demo.mp4)}）改写为内嵌 video 元素，
+     * 继承图片的内联样式（宽度/对齐参数依旧有效）；普通链接保持链接语义不改写。
+     */
+    private static void embedVideoElements(Element body) {
+        for (Element img : List.copyOf(body.select("img[src]"))) {
+            if (!isVideoSource(img.attr("src"))) {
+                continue;
+            }
+            Element video = img.ownerDocument().createElement("video");
+            video.attr("class", "mdocs-video");
+            video.attr("controls", "");
+            video.attr("preload", "metadata");
+            video.attr("playsinline", "");
+            video.attr("src", img.attr("src"));
+            String alt = img.attr("alt");
+            if (StringUtils.hasText(alt)) {
+                video.attr("aria-label", alt);
+            }
+            String title = img.attr("title");
+            if (StringUtils.hasText(title)) {
+                video.attr("title", title);
+            }
+            String style = img.attr("style");
+            if (StringUtils.hasText(style)) {
+                video.attr("style", style);
+            }
+            img.replaceWith(video);
+        }
+    }
+
+    private static boolean isVideoSource(String src) {
+        if (!StringUtils.hasText(src)) {
+            return false;
+        }
+        String path = src;
+        int queryIndex = path.indexOf('?');
+        if (queryIndex >= 0) {
+            path = path.substring(0, queryIndex);
+        }
+        int hashIndex = path.indexOf('#');
+        if (hashIndex >= 0) {
+            path = path.substring(0, hashIndex);
+        }
+        int dotIndex = path.lastIndexOf('.');
+        if (dotIndex < 0 || dotIndex == path.length() - 1) {
+            return false;
+        }
+        String extension = path.substring(dotIndex + 1).toLowerCase(Locale.ROOT);
+        return VIDEO_EXTENSIONS.contains(extension);
     }
 
     private static String normalizeMathBlocks(String markdown) {
@@ -266,10 +329,11 @@ public class MarkdownRenderer {
         boolean footnotes,
         boolean mark,
         boolean fixTermTypo,
-        boolean paragraphBeginningSpace
+        boolean paragraphBeginningSpace,
+        boolean mediaEmbed
     ) {
         public static RenderOptions defaults() {
-            return new RenderOptions(false, true, true, false, false, false);
+            return new RenderOptions(false, true, true, false, false, false, true);
         }
 
         public static RenderOptions from(DocIndexSettings settings) {
@@ -279,7 +343,8 @@ public class MarkdownRenderer {
                 !Boolean.FALSE.equals(settings.getRenderFootnotes()),
                 Boolean.TRUE.equals(settings.getRenderMark()),
                 Boolean.TRUE.equals(settings.getRenderFixTermTypo()),
-                Boolean.TRUE.equals(settings.getRenderParagraphBeginningSpace())
+                Boolean.TRUE.equals(settings.getRenderParagraphBeginningSpace()),
+                !Boolean.FALSE.equals(settings.getRenderMediaEmbed())
             );
         }
     }

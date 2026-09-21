@@ -13,6 +13,7 @@
   <th:block th:if="${!#strings.isEmpty(mdocsCustomHeadHtml)}" th:utext="${mdocsCustomHeadHtml}"></th:block>
   <link id="ratex-wasm-fonts" rel="stylesheet" href="/plugins/my-docs/assets/static/ratex/fonts.css"
         th:if="${detailContent.renderSettings.renderMathBlockPreview}">
+  <link rel="stylesheet" href="/plugins/my-docs/assets/static/css/mdocs-enhance.css">
   <style>
     html { scroll-behavior: smooth; }
     body { margin: 0; color: var(--mdocs-text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--mdocs-bg); transition: background-color .2s ease, color .2s ease; }
@@ -94,6 +95,7 @@
   </main>
   <th:block th:replace="~{plugin:my-docs:docs/modules/collapse :: collapse}"></th:block>
   <script src="/plugins/my-docs/assets/static/vditor/dist/method.min.js"></script>
+  <script src="/plugins/my-docs/assets/static/js/mdocs-enhance.js"></script>
   <script th:inline="javascript">
     (function () {
       var content = document.getElementById('mdocs-content');
@@ -111,6 +113,8 @@
         lineNumber: /*[[${detailContent.renderSettings.renderLineNumber}]]*/ false,
         codeBlockPreview: /*[[${detailContent.renderSettings.renderCodeBlockPreview}]]*/ true,
         mathBlockPreview: /*[[${detailContent.renderSettings.renderMathBlockPreview}]]*/ true,
+        copyButtons: /*[[${detailContent.renderSettings.renderCopyButtons}]]*/ true,
+        imageZoom: /*[[${detailContent.renderSettings.renderImageZoom}]]*/ true,
       };
       var cdn = '/plugins/my-docs/assets/static/vditor';
       var ratexBase = '/plugins/my-docs/assets/static/ratex';
@@ -314,6 +318,9 @@
       }
 
       function enhanceContent() {
+        if (window.MdocsEnhance) {
+          window.MdocsEnhance.prepareCharts(content);
+        }
         var scheme = currentScheme();
         var suffix = scheme === 'dark' ? 'Dark' : 'Light';
         var codeTheme = settings['codeTheme' + suffix];
@@ -333,7 +340,15 @@
             window.Vditor.SMILESRender(content, cdn, scheme);
           }
         }
-        return settings.mathBlockPreview ? renderMathWithRatex() : Promise.resolve();
+        var enhancement = settings.mathBlockPreview ? renderMathWithRatex() : Promise.resolve();
+        return enhancement.then(function () {
+          if (window.MdocsEnhance) {
+            window.MdocsEnhance.mount(content, {
+              copyButtons: settings.copyButtons,
+              imageZoom: settings.imageZoom,
+            });
+          }
+        });
       }
 
       applyTheme(currentScheme());
@@ -341,7 +356,11 @@
         console.warn('[my-docs] Frontend markdown enhancement failed.', error);
       });
       window.addEventListener('mdocs:scheme-change', function (event) {
-        applyTheme(event.detail && event.detail.scheme === 'dark' ? 'dark' : 'light');
+        var scheme = event.detail && event.detail.scheme === 'dark' ? 'dark' : 'light';
+        applyTheme(scheme);
+        if (window.MdocsEnhance) {
+          window.MdocsEnhance.rerenderCharts(content, scheme, cdn);
+        }
       });
     })();
   </script>
