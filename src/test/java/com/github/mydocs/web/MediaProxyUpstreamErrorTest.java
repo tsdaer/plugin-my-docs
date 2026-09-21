@@ -54,6 +54,44 @@ class MediaProxyUpstreamErrorTest {
             .contains("Authorization");
     }
 
+    /**
+     * R2 用 {@code InvalidArgument/Authorization} 表示「请求完全没带 Authorization 头」。
+     * 未签名时把下一步写进报错，别让管理员在类型与签名之间来回猜。
+     */
+    @Test
+    void hintsAtMissingCredentialsWhenRequestWentOutUnsigned() {
+        String xml = "<Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>";
+
+        var thrown = fetch(xml);
+
+        assertThat(thrown.getMessage()).contains("未携带签名");
+        assertThat(thrown.getMessage()).contains("签名凭证");
+    }
+
+    /** 请求已带签名却仍被拒时，报错不追加「未携带签名」的误导指引。 */
+    @Test
+    void doesNotHintAtMissingCredentialsWhenRequestWasSigned() {
+        String xml = "<Error><Code>InvalidArgument</Code><Message>Authorization</Message></Error>";
+        var service = new MediaProxyService(stubClient("application/xml",
+            xml.getBytes(StandardCharsets.UTF_8), HttpStatus.BAD_REQUEST));
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(true);
+        settings.setMediaProxyAllowedHosts(List.of("bucket.abc.r2.cloudflarestorage.com"));
+        settings.setMediaProxyCredentialRules(List.of(
+            "bucket.abc.r2.cloudflarestorage.com: access: A",
+            "bucket.abc.r2.cloudflarestorage.com: secret: S"));
+
+        try {
+            service.fetch(SOURCE, settings, HttpMethod.GET, new HttpHeaders())
+                .block(Duration.ofSeconds(20));
+        } catch (ResponseStatusException expected) {
+            assertThat(expected.getMessage()).contains("InvalidArgument");
+            assertThat(expected.getMessage()).doesNotContain("未携带签名");
+            return;
+        }
+        throw new AssertionError("预期抛出 ResponseStatusException");
+    }
+
     @Test
     void describesXmlWithoutCodeTagsGracefully() {
         var thrown = fetch("<html>not an s3 error</html>");

@@ -3,8 +3,11 @@ package com.github.mydocs.web;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
@@ -18,6 +21,8 @@ public class DocIndexSettingsService {
     private static final Pattern CSS_CLASS_PATTERN =
         Pattern.compile("^[A-Za-z_][A-Za-z0-9_-]*$");
     private static final Pattern CODE_THEME_PATTERN = Pattern.compile("^[a-z0-9-]{1,100}$");
+
+    private static final Logger log = LoggerFactory.getLogger(DocIndexSettingsService.class);
 
     private final ReactiveSettingFetcher settingFetcher;
 
@@ -76,20 +81,62 @@ public class DocIndexSettingsService {
             normalizeMediaProxyRequestHeaders(settings.getMediaProxyRequestHeaders(),
                 normalized.getMediaProxyAllowedHosts()));
         normalized.setMediaProxyCredentialRules(
-            MediaProxyRules.parseSigningRules(rawMediaProxyLines(settings.getMediaProxyCredentialRules()))
-                .stream()
-                .filter(rule -> normalized.getMediaProxyAllowedHosts().stream()
-                    .anyMatch(allowed -> MediaProxyRules.overlaps(allowed, rule.hostPattern())))
-                .map(rule -> rule.hostPattern() + ": access: " + rule.accessKey()
-                    + "\n" + rule.hostPattern() + ": secret: " + rule.secretKey()
-                    + ("auto".equals(rule.region()) ? ""
-                        : "\n" + rule.hostPattern() + ": region: " + rule.region()))
-                .toList());
+            normalizeMediaProxyCredentialRules(settings.getMediaProxyCredentialRules(),
+                normalized.getMediaProxyAllowedHosts()));
         normalized.setMediaProxyMaxBytes(
             positive(settings.getMediaProxyMaxBytes(), 536870912, 2147483647));
         normalized.setCustomHeadHtml(nullToEmpty(settings.getCustomHeadHtml()));
         normalized.setCustomBodyHtml(nullToEmpty(settings.getCustomBodyHtml()));
         return normalized;
+    }
+
+    /**
+     * 签名凭证规则：解析后只保留主机能被允许清单命中的规则，格式与 {@code MediaProxyRules}
+     * 保持一致。解析失败或未命中允许清单的行会在服务端日志里告警（值一律脱敏）——
+     * 否则一条写错的主机名会让私有桶的请求静默变成「未签名」，排查起来只剩 400。
+     */
+    static List<String> normalizeMediaProxyCredentialRules(List<String> source,
+        List<String> allowedHosts) {
+        var lines = rawMediaProxyLines(source);
+        var rules = MediaProxyRules.parseSigningRules(lines);
+        List<String> normalized = rules.stream()
+            .filter(rule -> allowedHosts.stream()
+                .anyMatch(allowed -> MediaProxyRules.overlaps(allowed, rule.hostPattern())))
+            .map(rule -> rule.hostPattern() + ": access: " + rule.accessKey()
+                + "\n" + rule.hostPattern() + ": secret: " + rule.secretKey()
+                + ("auto".equals(rule.region()) ? ""
+                    : "\n" + rule.hostPattern() + ": region: " + rule.region()))
+            .toList();
+
+        for (String line : lines) {
+            if (line.startsWith("#")) {
+                continue;
+            }
+            String[] parts = line.split(":", 3);
+            String hostPattern = parts.length == 3
+                ? parts[0].trim().toLowerCase(Locale.ROOT) : null;
+            if (hostPattern == null || !MediaProxyRules.isValidHostPattern(hostPattern)) {
+                log.warn("忽略无法解析的媒体代理签名凭证规则：{}（每行应为「主机: 键: 值」，"
+                    + "键取 access / secret / region）", maskCredentialLine(line));
+                continue;
+            }
+            boolean kept = normalized.stream().anyMatch(rule ->
+                rule.startsWith(hostPattern + ":"));
+            if (!kept) {
+                log.warn("媒体代理签名凭证规则未生效（主机 {}）：主机需与允许主机清单一致，"
+                    + "且 access 与 secret 必须成对出现", hostPattern);
+            }
+        }
+        return normalized;
+    }
+
+    /** 日志脱敏：只保留主机与键名，值换成 ***；连格式都不对时截断原文。 */
+    private static String maskCredentialLine(String line) {
+        String[] parts = line.split(":", 3);
+        if (parts.length == 3) {
+            return parts[0].trim() + ": " + parts[1].trim() + ": ***";
+        }
+        return line.length() <= 40 ? line + ": ***" : line.substring(0, 40) + "…: ***";
     }
 
     /**

@@ -113,6 +113,19 @@ class DocIndexSettingsServiceTest {
                 + "bucket.abc.r2.cloudflarestorage.com: secret: R2SECRET");
     }
 
+    /** access 没有配对的 secret（或反之）时整组丢弃——半对凭证签不出有效请求。 */
+    @Test
+    void dropsUnpairedCredentialRulesEntirely() {
+        var source = new DocIndexSettings();
+        source.setMediaProxyAllowedHosts(java.util.List.of("media.example.com"));
+        source.setMediaProxyCredentialRules(java.util.List.of(
+            "media.example.com: access: KEY"));
+
+        var settings = service(source).fetch().block();
+
+        assertThat(settings.getMediaProxyCredentialRules()).isEmpty();
+    }
+
     @Test
     void mediaProxyIsOffUnlessExplicitlyEnabled() {
         var settings = service(new DocIndexSettings()).fetch().block();

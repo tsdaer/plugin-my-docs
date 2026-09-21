@@ -74,7 +74,7 @@ class MediaProxyR2LocalTest {
     /**
      * 真实场景里的第一块绊脚石：R2 对未签名请求回
      * {@code 400 InvalidArgument/Authorization}（XML），代理要把它原样翻译出来，
-     * 而不是误报 415。
+     * 而不是误报 415，并附上「去配签名凭证」的指引。
      */
     @Test
     void surfacesR2AuthErrorWithoutCredentials() {
@@ -85,6 +85,7 @@ class MediaProxyR2LocalTest {
         } catch (ResponseStatusException expected) {
             assertThat(expected.getMessage()).contains("502");
             assertThat(expected.getMessage()).contains("InvalidArgument");
+            assertThat(expected.getMessage()).contains("未携带签名");
             return;
         }
         throw new AssertionError("未签名请求应被 R2 拒绝");

@@ -157,6 +157,8 @@ public class MediaProxyService {
         List<String> allowedHosts, HttpMethod method, HttpHeaders requestHeaders,
         int redirectCount, long maxBytes) {
         String host = MediaProxyRules.hostOf(target);
+        // 本次请求是否带上了 SigV4 签名；报错时用它区分「未签名被拒」与「签名被拒」。
+        var signed = new AtomicBoolean(false);
 
         // toEntityFlux：响应头到达即完成，响应体保持惰性流，端点订阅后才真正开始转发，
         // 连接的释放挂在响应体流的终止信号上（完成 / 出错 / 取消），随浏览器断开联动。
@@ -196,11 +198,13 @@ public class MediaProxyService {
                             signingRule.secretKey(), signingRule.region(), "s3");
                         signer.headers(method.name(), target, forwarded, Instant.now())
                             .forEach(headers::set);
+                        signed.set(true);
                     }
                 }
             })
             .retrieve()
-            .onStatus(HttpStatusCode::isError, response -> upstreamError(response, target))
+            .onStatus(HttpStatusCode::isError,
+                response -> upstreamError(response, target, signed.get()))
             .toEntityFlux(DataBuffer.class)
             .flatMap(entity -> {
                 HttpStatus status = HttpStatus.resolve(entity.getStatusCode().value());
@@ -290,8 +294,13 @@ public class MediaProxyService {
      * 错误状态统一在这里变成可读的 502：读一小段响应体，
      * 是 S3 的 {@code <Code>} / {@code <Message>} XML 就提出来，否则带上状态码。
      * 限制读取长度，避免为了报错把一个大响应拉下来。
+     *
+     * <p>R2 对「完全没带 Authorization 头」的请求回 {@code InvalidArgument/Authorization}，
+     * 与「签名错误」的 403 不同。前者十有八九是签名凭证没配上或没生效，
+     * 把下一步直接写进报错里，省得在 415 / 403 之间来回猜。</p>
      */
-    private static Mono<? extends Throwable> upstreamError(ClientResponse response, URI target) {
+    private static Mono<? extends Throwable> upstreamError(ClientResponse response, URI target,
+        boolean signed) {
         HttpStatus status = HttpStatus.resolve(response.statusCode().value());
         long limit = MAX_ERROR_SNIPPET;
         return DataBufferUtils.join(response.bodyToFlux(DataBuffer.class)
@@ -302,13 +311,23 @@ public class MediaProxyService {
                 joined.read(bytes);
                 DataBufferUtils.release(joined);
                 String snippet = new String(bytes, StandardCharsets.UTF_8);
-                log.warn("媒体代理上游返回错误文档：status={} source={} body={}", status, target,
-                    snippet.replaceAll("\\s+", " ").trim());
-                return new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    describeUpstreamError(status, snippet));
+                log.warn("媒体代理上游返回错误文档：status={} signed={} source={} body={}",
+                    status, signed, target, snippet.replaceAll("\\s+", " ").trim());
+                String description = describeUpstreamError(status, snippet);
+                if (!signed && isMissingAuthorization(snippet)) {
+                    description += "。本次请求未携带签名：请在「文档设置 → 媒体同域代理 → 签名凭证」"
+                        + "为该主机配置成对的 access 与 secret，主机需与允许主机清单一致";
+                }
+                return new ResponseStatusException(HttpStatus.BAD_GATEWAY, description);
             })
             .defaultIfEmpty(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                 "上游返回 " + (status == null ? "未知状态" : status.value()) + "，响应体为空"));
+    }
+
+    /** R2 的「缺少 Authorization 头」特征：InvalidArgument + Message 恰为 Authorization。 */
+    private static boolean isMissingAuthorization(String snippet) {
+        return "InvalidArgument".equalsIgnoreCase(extractXmlTag(snippet, "Code"))
+            && "Authorization".equalsIgnoreCase(extractXmlTag(snippet, "Message"));
     }
 
     /** 2xx / 3xx 但内容是 XML 文档：多半是对象存储把错误标成了别的状态。 */
