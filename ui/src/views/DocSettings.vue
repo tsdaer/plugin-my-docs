@@ -340,6 +340,7 @@ async function persistSettings(normalized: MyDocsSettings) {
     // 保存时压成多行文本，与设置表单的输入形态一致；后端两种形态都能读。
     mediaProxyAllowedHosts: normalized.mediaProxyAllowedHosts ?? [],
     mediaProxyRequestHeaders: normalized.mediaProxyRequestHeaders ?? [],
+    mediaProxyCredentialRules: normalized.mediaProxyCredentialRules ?? [],
     mediaProxyMaxBytes: Number(normalized.mediaProxyMaxBytes) || defaultMyDocsSettings.mediaProxyMaxBytes,
     customHeadHtml: normalized.customHeadHtml ?? '',
     customBodyHtml: normalized.customBodyHtml ?? '',
@@ -1140,6 +1141,17 @@ async function handleSubmit() {
               :model-value="settingsState.mediaProxyRequestHeaders.join('\n')"
               @update:model-value="
                 settingsState.mediaProxyRequestHeaders = readSettingsLines($event as string)
+              "
+            />
+            <FormKit
+              type="textarea"
+              name="mediaProxyCredentialRules"
+              label="媒体代理签名凭证"
+              help="私有桶用。每行一条「主机: 键: 值」，键取 access、secret，可选 region（默认 auto）。R2 / S3 不认静态 Bearer，GetObject 必须是签名请求，所以凭证填这里。"
+              :rows="4"
+              :model-value="settingsState.mediaProxyCredentialRules.join('\n')"
+              @update:model-value="
+                settingsState.mediaProxyCredentialRules = readSettingsLines($event as string)
               "
             />
             <FormKit

@@ -126,8 +126,26 @@
   只有列在这里的主机才会被代理；留空即完全关闭。
 - **媒体代理附加请求头**：每行 `主机: 头名: 头值`，仅对允许清单内的主机生效，
   用于私有桶的网关凭证。主机不要带端口，头值只存在服务端，不会输出到页面。
+- **媒体代理签名凭证**：私有桶的 S3 凭证，每行 `主机: 键: 值`，键取 `access`、`secret`
+  与可选 `region`（默认 `auto`）。**R2 / S3 不认静态 Bearer 令牌**，GetObject 必须是
+  SigV4 签名请求，所以私有桶要填这里而不是上面那项。
 - **媒体代理大小上限**：单个文件的上限，超过即中断。响应体在 8 MiB 以内走内存，
   更大则落临时文件流式回放，响应结束即删除。
+
+以 Cloudflare R2 为例，私有桶的最短路径是：建一个只读的 R2 API Token 拿到
+Access Key ID 与 Secret Access Key，然后把主机填进允许清单、凭证填进签名凭证：
+
+```
+媒体代理允许主机
+honkai-rts-website.<账户 ID>.r2.cloudflarestorage.com
+
+媒体代理签名凭证
+honkai-rts-website.<账户 ID>.r2.cloudflarestorage.com: access: <Access Key ID>
+honkai-rts-website.<账户 ID>.r2.cloudflarestorage.com: secret: <Secret Access Key>
+```
+
+凭证以明文存在站点的 ConfigMap 里，能读到该 ConfigMap 的人就能读到它，
+因此请只授予只读权限并定期轮换。
 
 对象存储里常见「上传时没带 Content-Type」的对象，R2 / S3 会回
 `application/octet-stream`。这种情况代理会按 URL 扩展名推断类型（`webm` → `video/webm` 等），

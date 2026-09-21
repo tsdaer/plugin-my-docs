@@ -135,6 +135,12 @@ spec:
           help: "可选，每行一条，格式为「主机: 头名: 头值」，例如 media.example.com: Authorization: Bearer xxx。主机不要带端口（写 media.example.com:8443 会被当成头名而整条失效），头值里可以带冒号。仅对上面允许清单内的主机生效，用于私有对象存储。注意：代理端点对访客开放，凭证只按主机匹配、没有路径限制，配了凭证就等于把该主机对公网开放读取；请只填只读、可随时吊销、且确实需要公开的媒体凭证。头值只保存在服务端设置里，不会输出到页面。"
           value: ""
           rows: 3
+        - $formkit: textarea
+          name: mediaProxyCredentialRules
+          label: 媒体代理签名凭证
+          help: "私有桶的 S3 凭证，每行一条，格式为「主机: 键: 值」，键取 access、secret，可选 region（默认 auto），例如 media.example.com: access: <AccessKeyId> 与 media.example.com: secret: <SecretAccessKey>。R2 / S3 不认静态 Bearer 令牌，GetObject 必须是签名请求，所以凭证填在这里而不是上面的附加请求头。只保存在服务端设置里，不会输出到页面。"
+          value: ""
+          rows: 4
         - $formkit: number
           name: mediaProxyMaxBytes
           label: 媒体代理大小上限（字节）

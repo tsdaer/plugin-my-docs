@@ -4,6 +4,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
@@ -223,8 +224,7 @@ public final class MediaProxyRules {
         return bothUnset;
     }
 
-    /** 解析 {@code 主机: 头名: 头值}；头值里允许出现冒号，所以最多切成三段。 */
-    static String[] parseHeaderRule(String line) {
+    /** 解析 {@code 主机: 头名: 头值}；头值里允许出现冒号，所以最多切成三段。 */    static String[] parseHeaderRule(String line) {
         if (!StringUtils.hasText(line)) {
             return null;
         }
@@ -281,7 +281,8 @@ public final class MediaProxyRules {
      * 匹配用 {@link #matches}，因此 {@code *.example.com} 的凭证在裸域名
      * {@code example.com} 上同样生效——允许清单与凭证规则保持同一套语义。
      */
-    static List<String[]> resolveRequestHeaders(List<String> rules, String host) {        List<String[]> headers = new ArrayList<>();
+    static List<String[]> resolveRequestHeaders(List<String> rules, String host) {
+        List<String[]> headers = new ArrayList<>();
         if (rules == null || rules.isEmpty() || !StringUtils.hasText(host)) {
             return headers;
         }
@@ -300,6 +301,66 @@ public final class MediaProxyRules {
             headers.add(new String[] {name, value});
         }
         return headers;
+    }
+
+    /**
+     * <p>{@code Authorization} 填不出来的场景：Cloudflare R2 / S3 的 API 不认静态 Bearer，
+     * GetObject 必须带按请求算出来的 SigV4 签名。所以凭证规则单独走一套键，
+     * 由 {@link #resolveSigningRule} 取出后在发请求时现算签名头。</p>
+     *
+     * <p>写法：每行 {@code 主机: 键: 值}，键取 {@code access}、{@code secret}
+     * 与可选的 {@code region}（默认 {@code auto}）。access 与 secret 必须成对出现。</p>
+     */
+    record SigningRule(String hostPattern, String accessKey, String secretKey, String region) {
+    }
+
+    /** 解析签名凭证规则；缺 access 或 secret 的整条丢弃。 */
+    static List<SigningRule> parseSigningRules(List<String> lines) {
+        Map<String, String[]> grouped = new java.util.LinkedHashMap<>();
+        for (String line : lines == null ? List.<String>of() : lines) {
+            if (!StringUtils.hasText(line)) {
+                continue;
+            }
+            String[] parts = line.split(":", 3);
+            if (parts.length < 3) {
+                continue;
+            }
+            String pattern = parts[0].trim().toLowerCase(Locale.ROOT);
+            String key = parts[1].trim().toLowerCase(Locale.ROOT);
+            String value = parts[2].trim();
+            if (!isValidHostSyntax(pattern) || value.isEmpty() || value.length() > 512
+                || value.contains("\r") || value.contains("\n")) {
+                continue;
+            }
+            if (!key.equals("access") && !key.equals("secret") && !key.equals("region")) {
+                continue;
+            }
+            String[] entry = grouped.computeIfAbsent(pattern, ignored -> new String[3]);
+            switch (key) {
+                case "access" -> entry[0] = value;
+                case "secret" -> entry[1] = value;
+                default -> entry[2] = value;
+            }
+        }
+
+        List<SigningRule> rules = new ArrayList<>();
+        grouped.forEach((pattern, entry) -> {
+            if (entry[0] == null || entry[1] == null) {
+                return;
+            }
+            String region = entry[2] == null || entry[2].isBlank() ? "auto" : entry[2].trim();
+            rules.add(new SigningRule(pattern, entry[0], entry[1], region));
+        });
+        return List.copyOf(rules);
+    }
+
+    /** 取第一个命中该主机的签名规则；没有则返回 null（表示按普通请求头发）。 */
+    static SigningRule resolveSigningRule(List<SigningRule> rules, String host) {
+        if (rules == null || rules.isEmpty() || !StringUtils.hasText(host)) {
+            return null;
+        }
+        return rules.stream().filter(rule -> matches(rule.hostPattern(), host)).findFirst()
+            .orElse(null);
     }
 
     static boolean isPrivateAddress(URI uri) {
@@ -396,3 +457,4 @@ public final class MediaProxyRules {
         return null;
     }
 }
+

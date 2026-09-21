@@ -55,6 +55,7 @@ export interface MyDocsSettings {
   mediaProxyEnabled: boolean
   mediaProxyAllowedHosts: string[]
   mediaProxyRequestHeaders: string[]
+  mediaProxyCredentialRules: string[]
   mediaProxyMaxBytes: number
   customHeadHtml: string
   customBodyHtml: string
@@ -90,6 +91,7 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   mediaProxyEnabled: false,
   mediaProxyAllowedHosts: [],
   mediaProxyRequestHeaders: [],
+  mediaProxyCredentialRules: [],
   mediaProxyMaxBytes: 536870912,
   customHeadHtml: '',
   customBodyHtml: '',
@@ -108,6 +110,7 @@ function cloneDefaultSettings(): MyDocsSettings {
     libraryIndexFolderTitles: [...defaultMyDocsSettings.libraryIndexFolderTitles],
     mediaProxyAllowedHosts: [...defaultMyDocsSettings.mediaProxyAllowedHosts],
     mediaProxyRequestHeaders: [...defaultMyDocsSettings.mediaProxyRequestHeaders],
+    mediaProxyCredentialRules: [...defaultMyDocsSettings.mediaProxyCredentialRules],
   }
 }
 
@@ -382,6 +385,7 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
       ),
       mediaProxyAllowedHosts: readLineList(parsed.mediaProxyAllowedHosts),
       mediaProxyRequestHeaders: readLineList(parsed.mediaProxyRequestHeaders),
+      mediaProxyCredentialRules: readLineList(parsed.mediaProxyCredentialRules),
       mediaProxyMaxBytes: normalizeByteLimit(
         parsed.mediaProxyMaxBytes,
         defaultMyDocsSettings.mediaProxyMaxBytes,
@@ -397,3 +401,4 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
 export function stringifyMyDocsSettings(settings: MyDocsSettings): string {
   return JSON.stringify(settings)
 }
+

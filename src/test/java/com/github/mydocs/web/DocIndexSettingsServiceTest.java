@@ -94,6 +94,26 @@ class DocIndexSettingsServiceTest {
     }
 
     @Test
+    void keepsSigningCredentialsOnlyForAllowlistedHosts() {
+        var source = new DocIndexSettings();
+        source.setMediaProxyAllowedHosts(java.util.List.of("bucket.abc.r2.cloudflarestorage.com"));
+        source.setMediaProxyCredentialRules(java.util.List.of(
+            "bucket.abc.r2.cloudflarestorage.com: access: R2KEY",
+            "bucket.abc.r2.cloudflarestorage.com: secret: R2SECRET",
+            "evil.example.net: access: NOPE",
+            "evil.example.net: secret: NOPE"
+        ));
+
+        var settings = service(source).fetch().block();
+
+        // 同一主机的 access / secret 归并成一段多行文本，便于设置页直接编辑；
+        // 后端与匹配逻辑两种形态都能读。
+        assertThat(settings.getMediaProxyCredentialRules())
+            .containsExactly("bucket.abc.r2.cloudflarestorage.com: access: R2KEY\n"
+                + "bucket.abc.r2.cloudflarestorage.com: secret: R2SECRET");
+    }
+
+    @Test
     void mediaProxyIsOffUnlessExplicitlyEnabled() {
         var settings = service(new DocIndexSettings()).fetch().block();
 

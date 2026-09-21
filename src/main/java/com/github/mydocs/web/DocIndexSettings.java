@@ -80,6 +80,13 @@ public class DocIndexSettings {
      */
     private List<String> mediaProxyRequestHeaders = new ArrayList<>();
 
+    /**
+     * 需要 SigV4 签名的对象存储凭证，每行 {@code 主机: 键: 值}，
+     * 键取 {@code access}、{@code secret} 与可选 {@code region}。
+     * 与 {@link #mediaProxyRequestHeaders} 二选一：R2 / S3 不认静态 Bearer，只能用签名。
+     */
+    private List<String> mediaProxyCredentialRules = new ArrayList<>();
+
     private Integer mediaProxyMaxBytes = 536870912;
 
     // 仅用于读取旧版 ConfigMap，规范化后不再写入模板模型。

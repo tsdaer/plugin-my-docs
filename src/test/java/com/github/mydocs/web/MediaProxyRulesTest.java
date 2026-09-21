@@ -137,6 +137,48 @@ class MediaProxyRulesTest {
     }
 
     @Test
+    void parsesSigningCredentialRules() {
+        var rules = MediaProxyRules.parseSigningRules(List.of(
+            "media.example.com: access: AKIDEXAMPLE",
+            "media.example.com: secret: wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+            "bucket.abc.r2.cloudflarestorage.com: access: R2KEY",
+            "bucket.abc.r2.cloudflarestorage.com: secret: R2SECRET",
+            "bucket.abc.r2.cloudflarestorage.com: region: auto",
+            // 只有一半凭证、非法主机、未知键都要丢掉
+            "half.example.com: access: ONLYACCESS",
+            "127.0.0.1: access: x",
+            "media.example.org: token: nope"
+        ));
+
+        assertThat(rules).hasSize(2);
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "media.example.com"))
+            .isNotNull()
+            .satisfies(rule -> {
+                assertThat(rule.accessKey()).isEqualTo("AKIDEXAMPLE");
+                assertThat(rule.secretKey()).isEqualTo("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY");
+                assertThat(rule.region()).isEqualTo("auto");
+            });
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "bucket.abc.r2.cloudflarestorage.com"))
+            .isNotNull();
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "other.example.com")).isNull();
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "half.example.com")).isNull();
+    }
+
+    @Test
+    void signingRulesFollowTheSameHostMatchingAsTheAllowlist() {
+        var rules = MediaProxyRules.parseSigningRules(List.of(
+            "*.r2.cloudflarestorage.com: access: K",
+            "*.r2.cloudflarestorage.com: secret: S"
+        ));
+
+        // 通配覆盖子域与裸域名，且尾点写法同样命中，与允许清单语义一致。
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "bucket.abc.r2.cloudflarestorage.com"))
+            .isNotNull();
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "r2.cloudflarestorage.com")).isNotNull();
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "evil.com")).isNull();
+    }
+
+    @Test
     void extractsSourceFromProxyUrl() {
         assertThat(MediaProxyRules.sourceOf(
             MediaProxyRules.PROXY_PATH + "?src=https%3A%2F%2Fmedia.example.com%2Fa.webm"))

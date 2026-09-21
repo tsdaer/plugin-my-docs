@@ -75,6 +75,16 @@ public class DocIndexSettingsService {
         normalized.setMediaProxyRequestHeaders(
             normalizeMediaProxyRequestHeaders(settings.getMediaProxyRequestHeaders(),
                 normalized.getMediaProxyAllowedHosts()));
+        normalized.setMediaProxyCredentialRules(
+            MediaProxyRules.parseSigningRules(rawMediaProxyLines(settings.getMediaProxyCredentialRules()))
+                .stream()
+                .filter(rule -> normalized.getMediaProxyAllowedHosts().stream()
+                    .anyMatch(allowed -> MediaProxyRules.overlaps(allowed, rule.hostPattern())))
+                .map(rule -> rule.hostPattern() + ": access: " + rule.accessKey()
+                    + "\n" + rule.hostPattern() + ": secret: " + rule.secretKey()
+                    + ("auto".equals(rule.region()) ? ""
+                        : "\n" + rule.hostPattern() + ": region: " + rule.region()))
+                .toList());
         normalized.setMediaProxyMaxBytes(
             positive(settings.getMediaProxyMaxBytes(), 536870912, 2147483647));
         normalized.setCustomHeadHtml(nullToEmpty(settings.getCustomHeadHtml()));

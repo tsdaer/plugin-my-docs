@@ -5,6 +5,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -160,9 +161,13 @@ public class MediaProxyService {
         return webClient.method(method)
             .uri(target)
             .headers(headers -> {
+                var forwarded = new java.util.LinkedHashMap<String, String>();
                 requestHeaders.forEach((name, values) -> {
-                    if (FORWARD_REQUEST_HEADERS.stream().anyMatch(name::equalsIgnoreCase)) {
-                        headers.put(name, values);
+                    if (FORWARD_REQUEST_HEADERS.stream().anyMatch(name::equalsIgnoreCase)
+                        && !values.isEmpty()) {
+                        String trimmed = values.get(0).trim();
+                        headers.set(name, trimmed);
+                        forwarded.put(name.toLowerCase(Locale.ROOT), trimmed);
                     }
                 });
                 for (String[] header : MediaProxyRules.resolveRequestHeaders(
@@ -174,6 +179,18 @@ public class MediaProxyService {
                         log.warn("媒体代理忽略不可写的请求头 {}: {}", header[0],
                             exception.getMessage());
                     }
+                }
+
+                // R2 / S3 不认静态 Bearer，必须按请求现算 SigV4 签名；
+                // 参与签名的头要与真正发出去的值完全一致。
+                var signingRule = MediaProxyRules.resolveSigningRule(
+                    MediaProxyRules.parseSigningRules(settings.getMediaProxyCredentialRules()),
+                    host);
+                if (signingRule != null) {
+                    var signer = new AwsSigV4Signer(signingRule.accessKey(), signingRule.secretKey(),
+                        signingRule.region(), "s3");
+                    signer.headers(method.name(), target, forwarded, Instant.now())
+                        .forEach(headers::set);
                 }
             })
             .exchangeToMono(response -> {
@@ -428,3 +445,4 @@ public class MediaProxyService {
     public record ProxiedMedia(HttpStatus status, HttpHeaders headers, ProxiedBody body) {
     }
 }
+
