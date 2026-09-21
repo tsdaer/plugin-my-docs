@@ -49,6 +49,13 @@ export interface MyDocsSettings {
   renderParagraphBeginningSpace: boolean
   renderCodeBlockPreview: boolean
   renderMathBlockPreview: boolean
+  renderCopyButtons: boolean
+  renderImageZoom: boolean
+  renderMediaEmbed: boolean
+  mediaProxyEnabled: boolean
+  mediaProxyAllowedHosts: string[]
+  mediaProxyRequestHeaders: string[]
+  mediaProxyMaxBytes: number
   customHeadHtml: string
   customBodyHtml: string
 }
@@ -77,9 +84,20 @@ export const defaultMyDocsSettings: MyDocsSettings = {
   renderParagraphBeginningSpace: false,
   renderCodeBlockPreview: true,
   renderMathBlockPreview: true,
+  renderCopyButtons: true,
+  renderImageZoom: true,
+  renderMediaEmbed: true,
+  mediaProxyEnabled: false,
+  mediaProxyAllowedHosts: [],
+  mediaProxyRequestHeaders: [],
+  mediaProxyMaxBytes: 536870912,
   customHeadHtml: '',
   customBodyHtml: '',
 }
+
+/** 「媒体代理大小上限」的可填范围，与后端 normalize 的上下限一致。 */
+export const MEDIA_PROXY_MIN_BYTES = 1048576
+export const MEDIA_PROXY_MAX_BYTES = 2147483647
 
 function cloneDefaultSettings(): MyDocsSettings {
   return {
@@ -88,6 +106,8 @@ function cloneDefaultSettings(): MyDocsSettings {
     libraryIndexRowLayouts: [...defaultMyDocsSettings.libraryIndexRowLayouts],
     libraryIndexPlacements: [...defaultMyDocsSettings.libraryIndexPlacements],
     libraryIndexFolderTitles: [...defaultMyDocsSettings.libraryIndexFolderTitles],
+    mediaProxyAllowedHosts: [...defaultMyDocsSettings.mediaProxyAllowedHosts],
+    mediaProxyRequestHeaders: [...defaultMyDocsSettings.mediaProxyRequestHeaders],
   }
 }
 
@@ -132,6 +152,30 @@ function normalizePositiveInt(value: unknown, fallback: number, max = 24): numbe
     return fallback
   }
   return Math.min(parsed, max)
+}
+
+/**
+ * 表单里这两项是多行文本，configMap 里存的是数组；两种形态都要能读回来。
+ * 只做去空行与去重，具体合法性交给后端 normalize 判断。
+ */
+function readLineList(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/\r?\n/) : []
+  const lines: string[] = []
+  raw.forEach((item) => {
+    const line = typeof item === 'string' ? item.trim() : ''
+    if (line && !lines.includes(line)) {
+      lines.push(line)
+    }
+  })
+  return lines
+}
+
+function normalizeByteLimit(value: unknown, fallback: number): number {
+  const parsed = Math.floor(Number(value))
+  if (!Number.isFinite(parsed)) {
+    return fallback
+  }
+  return Math.min(Math.max(parsed, MEDIA_PROXY_MIN_BYTES), MEDIA_PROXY_MAX_BYTES)
 }
 
 function readPageLayouts(value: unknown): LibraryPageLayoutSetting[] {
@@ -322,6 +366,25 @@ export function parseMyDocsSettings(raw?: string | null): MyDocsSettings {
       renderMathBlockPreview: readBoolean(
         parsed.renderMathBlockPreview,
         defaultMyDocsSettings.renderMathBlockPreview,
+      ),
+      renderCopyButtons: readBoolean(
+        parsed.renderCopyButtons,
+        defaultMyDocsSettings.renderCopyButtons,
+      ),
+      renderImageZoom: readBoolean(parsed.renderImageZoom, defaultMyDocsSettings.renderImageZoom),
+      renderMediaEmbed: readBoolean(
+        parsed.renderMediaEmbed,
+        defaultMyDocsSettings.renderMediaEmbed,
+      ),
+      mediaProxyEnabled: readBoolean(
+        parsed.mediaProxyEnabled,
+        defaultMyDocsSettings.mediaProxyEnabled,
+      ),
+      mediaProxyAllowedHosts: readLineList(parsed.mediaProxyAllowedHosts),
+      mediaProxyRequestHeaders: readLineList(parsed.mediaProxyRequestHeaders),
+      mediaProxyMaxBytes: normalizeByteLimit(
+        parsed.mediaProxyMaxBytes,
+        defaultMyDocsSettings.mediaProxyMaxBytes,
       ),
       customHeadHtml: readString(parsed.customHeadHtml, defaultMyDocsSettings.customHeadHtml),
       customBodyHtml: readString(parsed.customBodyHtml, defaultMyDocsSettings.customBodyHtml),

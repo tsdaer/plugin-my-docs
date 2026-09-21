@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  MEDIA_PROXY_MAX_BYTES,
+  MEDIA_PROXY_MIN_BYTES,
   defaultMyDocsSettings,
   parseMyDocsSettings,
   stringifyMyDocsSettings,
@@ -145,5 +147,67 @@ describe('my-docs settings', () => {
       renderContentThemeLightUrl: '',
       renderContentThemeLightClass: 'markdown-body',
     })
+  })
+
+  it('keeps media and proxy fields that the settings form now owns', () => {
+    // 这些字段此前只写在 settings.yaml 里，文档设置页保存时会把它们整组覆盖掉，
+    // 于是既看不到、也会被静默清空。这里守住「解析后再序列化不丢字段」。
+    const parsed = parseMyDocsSettings(
+      JSON.stringify({
+        renderCopyButtons: false,
+        renderImageZoom: false,
+        renderMediaEmbed: false,
+        mediaProxyEnabled: true,
+        mediaProxyAllowedHosts: ['media.example.com', '*.r2.cloudflarestorage.com'],
+        mediaProxyRequestHeaders: ['media.example.com: Authorization: Bearer x'],
+        mediaProxyMaxBytes: 10485760,
+      }),
+    )
+
+    expect(parsed).toMatchObject({
+      renderCopyButtons: false,
+      renderImageZoom: false,
+      renderMediaEmbed: false,
+      mediaProxyEnabled: true,
+      mediaProxyAllowedHosts: ['media.example.com', '*.r2.cloudflarestorage.com'],
+      mediaProxyRequestHeaders: ['media.example.com: Authorization: Bearer x'],
+      mediaProxyMaxBytes: 10485760,
+    })
+
+    const roundTripped = parseMyDocsSettings(stringifyMyDocsSettings(parsed))
+    expect(roundTripped).toEqual(parsed)
+  })
+
+  it('reads proxy host and header lists from newline text as well as arrays', () => {
+    expect(
+      parseMyDocsSettings(
+        JSON.stringify({
+          mediaProxyAllowedHosts: 'media.example.com\n\n  *.r2.cloudflarestorage.com  \nmedia.example.com',
+          mediaProxyRequestHeaders: 'media.example.com: X-Token: t',
+        }),
+      ),
+    ).toMatchObject({
+      mediaProxyAllowedHosts: ['media.example.com', '*.r2.cloudflarestorage.com'],
+      mediaProxyRequestHeaders: ['media.example.com: X-Token: t'],
+    })
+  })
+
+  it('clamps the proxy size limit and defaults the media switches', () => {
+    const defaults = parseMyDocsSettings()
+    expect(defaults.renderCopyButtons).toBe(true)
+    expect(defaults.renderImageZoom).toBe(true)
+    expect(defaults.renderMediaEmbed).toBe(true)
+    expect(defaults.mediaProxyEnabled).toBe(false)
+    expect(defaults.mediaProxyMaxBytes).toBe(536870912)
+
+    expect(
+      parseMyDocsSettings(JSON.stringify({ mediaProxyMaxBytes: 1 })).mediaProxyMaxBytes,
+    ).toBe(MEDIA_PROXY_MIN_BYTES)
+    expect(
+      parseMyDocsSettings(JSON.stringify({ mediaProxyMaxBytes: 99999999999 })).mediaProxyMaxBytes,
+    ).toBe(MEDIA_PROXY_MAX_BYTES)
+    expect(
+      parseMyDocsSettings(JSON.stringify({ mediaProxyMaxBytes: 'abc' })).mediaProxyMaxBytes,
+    ).toBe(536870912)
   })
 })

@@ -27,6 +27,8 @@ import {
   type MyDocsBackupFile,
 } from '@/utils/my-docs-backup'
 import {
+  MEDIA_PROXY_MAX_BYTES,
+  MEDIA_PROXY_MIN_BYTES,
   MY_DOCS_CONFIG_GROUP,
   MY_DOCS_CONFIG_MAP_NAME,
   defaultMyDocsSettings,
@@ -42,6 +44,22 @@ import { SNIPPET_PROMPT, EXTENSION_PROMPT } from '@/utils/ai-prompts'
 
 const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 const LIST_PAGE_SIZE = 200
+
+/**
+ * 多行文本框与字符串数组互转。用换行分隔比 JSON 数组好填，且后端两种形态都能读。
+ */
+function readSettingsLines(value: string): string[] {
+  const lines: string[] = []
+  String(value ?? '')
+    .split(/\r?\n/)
+    .forEach((raw) => {
+      const line = raw.trim()
+      if (line && !lines.includes(line)) {
+        lines.push(line)
+      }
+    })
+  return lines
+}
 
 const router = useRouter()
 const queryClient = useQueryClient()
@@ -315,6 +333,14 @@ async function persistSettings(normalized: MyDocsSettings) {
     renderParagraphBeginningSpace: !!normalized.renderParagraphBeginningSpace,
     renderCodeBlockPreview: !!normalized.renderCodeBlockPreview,
     renderMathBlockPreview: !!normalized.renderMathBlockPreview,
+    renderCopyButtons: !!normalized.renderCopyButtons,
+    renderImageZoom: !!normalized.renderImageZoom,
+    renderMediaEmbed: !!normalized.renderMediaEmbed,
+    mediaProxyEnabled: !!normalized.mediaProxyEnabled,
+    // 保存时压成多行文本，与设置表单的输入形态一致；后端两种形态都能读。
+    mediaProxyAllowedHosts: normalized.mediaProxyAllowedHosts ?? [],
+    mediaProxyRequestHeaders: normalized.mediaProxyRequestHeaders ?? [],
+    mediaProxyMaxBytes: Number(normalized.mediaProxyMaxBytes) || defaultMyDocsSettings.mediaProxyMaxBytes,
     customHeadHtml: normalized.customHeadHtml ?? '',
     customBodyHtml: normalized.customBodyHtml ?? '',
   }
@@ -1052,7 +1078,86 @@ async function handleSubmit() {
               help="使用 RaTeX（WASM + Canvas）渲染 $...$ 与 $$...$$ 公式，失败时回退到 Vditor。"
               v-model="settingsState.renderMathBlockPreview"
             />
+            <FormKit
+              type="switch"
+              name="renderCopyButtons"
+              label="复制按钮"
+              help="为代码块、图片和块级公式显示复制按钮。"
+              v-model="settingsState.renderCopyButtons"
+            />
+            <FormKit
+              type="switch"
+              name="renderImageZoom"
+              label="图片点击放大"
+              help="点击正文图片以灯箱形式放大查看。"
+              v-model="settingsState.renderImageZoom"
+            />
           </div>
+        </div>
+
+        <div class="doc-settings-section">
+          <h3 class="doc-settings-title">视频与媒体代理</h3>
+          <p class="doc-settings-help">
+            用图片语法（<code>![](demo.mp4)</code>）指向视频文件时，前台会渲染成内嵌播放器。
+            如果视频放在不对公网开放的对象存储上（附件只记录裸对象地址，浏览器直连会拿到
+            400 / 403），可以打开媒体同域代理：命中下方允许清单的图片、音视频地址会改写成站点
+            自身的 <code>/media-proxy</code> 地址，由服务端代取，前台只与站点同域通信。
+          </p>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="switch"
+              name="renderMediaEmbed"
+              label="视频内嵌播放"
+              help="把图片语法引用的 mp4、webm、m3u8 等视频文件渲染为内嵌播放器（DPlayer）。"
+              v-model="settingsState.renderMediaEmbed"
+            />
+            <FormKit
+              type="switch"
+              name="mediaProxyEnabled"
+              label="媒体同域代理"
+              help="仅对下方允许清单内的主机生效；关闭或清单为空时不做任何改写。"
+              v-model="settingsState.mediaProxyEnabled"
+            />
+          </div>
+          <div class="doc-settings-grid">
+            <FormKit
+              type="textarea"
+              name="mediaProxyAllowedHosts"
+              label="媒体代理允许主机"
+              help="每行一个主机名，例如 media.example.com 或 *.r2.cloudflarestorage.com（支持通配与 :端口）。留空即完全关闭代理。"
+              :rows="4"
+              :model-value="settingsState.mediaProxyAllowedHosts.join('\n')"
+              @update:model-value="
+                settingsState.mediaProxyAllowedHosts = readSettingsLines($event as string)
+              "
+            />
+            <FormKit
+              type="textarea"
+              name="mediaProxyRequestHeaders"
+              label="媒体代理附加请求头"
+              help="可选，每行一条，格式为「主机: 头名: 头值」，例如 media.example.com: Authorization: Bearer xxx。主机不要带端口。仅对允许清单内的主机生效，用于私有对象存储。"
+              :rows="4"
+              :model-value="settingsState.mediaProxyRequestHeaders.join('\n')"
+              @update:model-value="
+                settingsState.mediaProxyRequestHeaders = readSettingsLines($event as string)
+              "
+            />
+            <FormKit
+              type="number"
+              name="mediaProxyMaxBytes"
+              label="媒体代理大小上限（字节）"
+              help="单个媒体文件超过该值时中断，默认 536870912（512 MiB），最小 1048576。"
+              :min="MEDIA_PROXY_MIN_BYTES"
+              :max="MEDIA_PROXY_MAX_BYTES"
+              step="1048576"
+              v-model="settingsState.mediaProxyMaxBytes"
+            />
+          </div>
+          <p class="doc-settings-help">
+            ⚠️ 代理端点对访客开放，而请求头规则只按主机匹配、没有路径限制：一旦配上凭证，
+            任何访客都能取该主机下的任意对象，不只是文档引用过的那些。请只把确实需要公开的媒体主机
+            写进允许清单，凭证也请用只读、可随时吊销的那种。
+          </p>
         </div>
 
         <div class="doc-settings-section">
