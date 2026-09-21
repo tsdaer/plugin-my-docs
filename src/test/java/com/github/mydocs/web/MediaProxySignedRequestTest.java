@@ -80,6 +80,24 @@ class MediaProxySignedRequestTest {
         assertThat(first(captured.get(), "Authorization")).isNull();
     }
 
+    /**
+     * 地址已带预签名查询参数（X-Amz-Signature 一类）时不得再叠头部签名：
+     * 查询串签名与 Authorization 并存，S3 / R2 会直接回 400
+     * 「Only one auth mechanism allowed」。
+     */
+    @Test
+    void skipsHeaderSigningWhenTheUrlIsAlreadyPresigned() {
+        var captured = new AtomicReference<Map<String, List<String>>>();
+        var service = new MediaProxyService(stubClient(captured));
+
+        service.fetch(SOURCE + "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc123",
+            settingsWithCredentials(), HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(20));
+
+        assertThat(first(captured.get(), "Authorization")).isNull();
+        assertThat(first(captured.get(), "x-amz-date")).isNull();
+    }
+
     @Test
     void refusesToExposeCredentialsToUnlistedHosts() {
         var captured = new AtomicReference<Map<String, List<String>>>();

@@ -1,25 +1,24 @@
 package com.github.mydocs.web;
 
-import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Pattern;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
+import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -28,7 +27,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 /**
  * <p>同域媒体反代：由 Halo 服务端代取后台允许清单里的外部媒体，再以站点自身的域名
@@ -37,9 +35,16 @@ import reactor.core.scheduler.Schedulers;
  * <p>它解决的场景是「对象存储桶不公开、附件 permalink 又只是裸对象地址」：
  * 浏览器直连会拿到 400 / 403，而同域代理可以带上网关凭证（允许清单里可配请求头）。</p>
  *
+ * <p><b>流式转发</b>：上游响应头一到就把响应交回给浏览器，响应体边收边转，
+ * 不在服务端整段缓冲。这是视频能正常播放的前提——播放器要的是首帧快、
+ * Range 拖动只取所需片段、切进度条时立刻放弃旧请求；任何「先下完再回」的实现
+ * 都会让首帧等完整下载、每次拖动都重新全量拉取。浏览器断开时取消信号会顺着
+ * 响应体流传导回上游，不会白白下完一个没人要的文件。</p>
+ *
  * <p>安全边界全部落在允许清单上：只有清单命中的主机才会被代取，重定向后的目标必须重新命中
- * 同一份清单，解析到环回 / 私有网段的地址直接拒绝，响应流超过上限即中断，
- * 内容类型只放行音视频与（非 SVG 的）图片。允许清单为空或开关关闭时，端点一律拒绝请求。</p>
+ * 同一份清单，解析到环回 / 私有网段的地址直接拒绝，响应按大小上限把关（声明的
+ * Content-Length 超限直接拒；上游谎报长度时按实际字节中断），内容类型只放行音视频与
+ * （非 SVG 的）图片。允许清单为空或开关关闭时，端点一律拒绝请求。</p>
  *
  * <p><b>授权提示</b>：端点是匿名可达的，而请求头规则只按主机匹配，
  * 因此清单里的主机一旦配上凭证，任何访客都能取该主机下<em>任意</em>对象，
@@ -67,11 +72,6 @@ public class MediaProxyService {
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
 
-    /** 不超过这个大小就整个放内存，超过则落临时文件流式回放。 */
-    private static final long IN_MEMORY_LIMIT = 8L * 1024 * 1024;
-
-    private static final int BUFFER_SIZE = 64 * 1024;
-
     /** 上游错误文档最多读这么长，够提出 Code/Message 即可。 */
     private static final long MAX_ERROR_SNIPPET = 8 * 1024;
 
@@ -82,7 +82,8 @@ public class MediaProxyService {
             .clientConnector(new org.springframework.http.client.reactive.ReactorClientHttpConnector(
                 reactor.netty.http.client.HttpClient.create()
                     .followRedirect(false)
-                    .compress(true)
+                    // 刻意不开启压缩协商：我们要把上游字节原样转给浏览器，
+                    // 若中途解压了却仍透传 Content-Encoding/Content-Length，视频会被破坏。
                     .responseTimeout(RESPONSE_TIMEOUT)
                     .option(io.netty.channel.ChannelOption.CONNECT_TIMEOUT_MILLIS,
                         (int) CONNECT_TIMEOUT.toMillis())))
@@ -101,7 +102,8 @@ public class MediaProxyService {
      * @param settings 生效中的插件设置（允许清单、请求头规则、大小上限）
      * @param method 浏览器发来的方法，仅支持 GET 与 HEAD
      * @param requestHeaders 浏览器请求头，只挑 Range 一类转发
-     * @return 可直接写回浏览器的状态码、响应头与响应体
+     * @return 可直接写回浏览器的状态码、响应头与流式响应体；响应体被订阅后开始转发，
+     *     终止（完成 / 出错 / 取消）时上游连接自动释放
      */
     public Mono<ProxiedMedia> fetch(String source, DocIndexSettings settings, HttpMethod method,
         HttpHeaders requestHeaders) {
@@ -120,15 +122,7 @@ public class MediaProxyService {
             URI target = validate(source, allowedHosts);
             long maxBytes = maxBytes(settings);
             return request(target, settings, allowedHosts, method, requestHeaders, 0, maxBytes)
-                .map(response -> {
-                    try {
-                        return toProxiedMedia(response);
-                    } catch (RuntimeException exception) {
-                        // 校验没过就别把临时文件留在磁盘上。
-                        response.body().release();
-                        throw exception;
-                    }
-                });
+                .map(MediaProxyService::toProxiedMedia);
         });
     }
 
@@ -164,6 +158,8 @@ public class MediaProxyService {
         int redirectCount, long maxBytes) {
         String host = MediaProxyRules.hostOf(target);
 
+        // toEntityFlux：响应头到达即完成，响应体保持惰性流，端点订阅后才真正开始转发，
+        // 连接的释放挂在响应体流的终止信号上（完成 / 出错 / 取消），随浏览器断开联动。
         return webClient.method(method)
             .uri(target)
             .headers(headers -> {
@@ -189,154 +185,137 @@ public class MediaProxyService {
 
                 // R2 / S3 不认静态 Bearer，必须按请求现算 SigV4 签名；
                 // 参与签名的头要与真正发出去的值完全一致。
-                var signingRule = MediaProxyRules.resolveSigningRule(
-                    MediaProxyRules.parseSigningRules(settings.getMediaProxyCredentialRules()),
-                    host);
-                if (signingRule != null) {
-                    var signer = new AwsSigV4Signer(signingRule.accessKey(), signingRule.secretKey(),
-                        signingRule.region(), "s3");
-                    signer.headers(method.name(), target, forwarded, Instant.now())
-                        .forEach(headers::set);
+                // 地址本身已带 X-Amz-Signature 一类查询鉴权（预签名 URL）时跳过：
+                // 查询串签名与 Authorization 头签名并存，S3 会直接回 400。
+                if (!isPresigned(target)) {
+                    var signingRule = MediaProxyRules.resolveSigningRule(
+                        MediaProxyRules.parseSigningRules(settings.getMediaProxyCredentialRules()),
+                        host);
+                    if (signingRule != null) {
+                        var signer = new AwsSigV4Signer(signingRule.accessKey(),
+                            signingRule.secretKey(), signingRule.region(), "s3");
+                        signer.headers(method.name(), target, forwarded, Instant.now())
+                            .forEach(headers::set);
+                    }
                 }
             })
-            .exchangeToMono(response -> {
-                HttpStatus status = HttpStatus.resolve(response.statusCode().value());
-                boolean redirect = status != null && status.is3xxRedirection();
-                if (redirect) {
-                    String location = response.headers().header(HttpHeaders.LOCATION).stream()
-                        .findFirst().orElse(null);
-                    if (redirectCount >= MAX_REDIRECTS) {
-                        response.releaseBody().subscribe();
-                        return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                            "上游重定向次数过多"));
-                    }
-                    if (!StringUtils.hasText(location)) {
-                        response.releaseBody().subscribe();
-                        return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                            "上游返回了没有 Location 的重定向"));
-                    }
-                    response.releaseBody().subscribe();
-                    URI next;
-                    try {
-                        next = target.resolve(location.trim());
-                    } catch (IllegalArgumentException exception) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                            "上游重定向地址不合法"));
-                    }
-                    // 重定向目标必须重新过一遍允许清单与内网检查。
-                    URI validated = validate(next.toString(), allowedHosts);
-                    return request(validated, settings, allowedHosts, method, requestHeaders,
-                        redirectCount + 1, maxBytes);
+            .retrieve()
+            .onStatus(HttpStatusCode::isError, response -> upstreamError(response, target))
+            .toEntityFlux(DataBuffer.class)
+            .flatMap(entity -> {
+                HttpStatus status = HttpStatus.resolve(entity.getStatusCode().value());
+
+                if (status != null && status.is3xxRedirection()) {
+                    String location = entity.getHeaders().getFirst(HttpHeaders.LOCATION);
+                    return drain(entity.getBody()).then(Mono.defer(() -> followRedirect(
+                        target, location, settings, allowedHosts, method, requestHeaders,
+                        redirectCount, maxBytes)));
                 }
 
                 // 类型与声明长度先判，避免为一个注定要拒的上游先下载整个文件。
                 // 上游类型不可信（对象存储常见 octet-stream），所以结合 URL 扩展名一起判断。
-                String upstreamType = response.headers().asHttpHeaders()
-                    .getFirst(HttpHeaders.CONTENT_TYPE);
+                String upstreamType = entity.getHeaders().getFirst(HttpHeaders.CONTENT_TYPE);
                 String resolvedType = MediaTypePolicy.resolve(upstreamType, target.toString());
                 if (resolvedType == null) {
                     if (MediaTypePolicy.isXml(upstreamType)) {
                         // 对象存储的鉴权/找不到对象错误都是 XML 文档，报「415 类型不允许」
                         // 会把人引到类型上，实际原因在响应体里，读出来带上。
-                        return readUpstreamError(response, status, target);
+                        return readUpstreamError(status, entity.getHeaders(), entity.getBody(),
+                            target);
                     }
-                    response.releaseBody().subscribe();
                     log.warn("媒体代理拒绝上游内容类型：type={} source={}", upstreamType, target);
-                    return Mono.error(new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                    return Mono.error(new ResponseStatusException(
+                        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
                         "上游内容类型不允许通过媒体代理：" + upstreamType));
                 }
                 boolean attachment = MediaTypePolicy.needsAttachmentDisposition(target.toString());
-                long declaredLength = response.headers().asHttpHeaders().getContentLength();
+                long declaredLength = entity.getHeaders().getContentLength();
                 if (declaredLength > maxBytes) {
-                    response.releaseBody().subscribe();
                     return Mono.error(tooLarge());
                 }
 
-                // 204 之类的 2xx 不带响应体，不必为它落一份空文件（落了也没人持有）。
-                if (!hasBody(status)) {
-                    response.releaseBody().subscribe();
-                    return Mono.just(new UpstreamResponse(status, response.headers().asHttpHeaders(),
-                        ProxiedBody.of(new byte[0]), resolvedType, attachment));
-                }
-
-                // HEAD 只要响应头，不必为它落一份 0 字节的临时文件。
+                // HEAD 只要响应头；把（通常为空的）上游体消费掉以释放连接。
                 if (method == HttpMethod.HEAD) {
-                    response.releaseBody().subscribe();
-                    return Mono.just(new UpstreamResponse(status,
-                        response.headers().asHttpHeaders(), ProxiedBody.of(new byte[0]),
-                        resolvedType, attachment));
+                    return drain(entity.getBody()).then(Mono.fromSupplier(() ->
+                        new UpstreamResponse(status, entity.getHeaders(),
+                            Flux.empty(), resolvedType, attachment)));
                 }
 
-                // 响应体必须在 exchangeToMono 的回调内读完：回调返回后 WebClient 会释放它。
-                return store(response.bodyToFlux(DataBuffer.class), declaredLength, maxBytes)
-                    .map(stored -> new UpstreamResponse(status, response.headers().asHttpHeaders(),
-                        stored, resolvedType, attachment));
+                return Mono.just(new UpstreamResponse(status, entity.getHeaders(),
+                    enforceLimit(entity.getBody(), maxBytes), resolvedType, attachment));
             });
     }
 
-    /**
-     * 把上游响应体落成可重复读取的形态：小文件放内存，大文件落临时文件再流式回放，
-     * 避免整个视频进堆。两种形态都在流上就按上限截断，不看上游声明的长度是否可信。
-     *
-     * <p>这里刻意不做「用完即删」：临时文件的生命周期归调用方
-     * （{@code MediaProxyEndpoint} 在响应终止时调用 {@link ProxiedBody#release()}）。
-     * 早先在这里用 {@code usingWhen} 释放过一次，结果是资源 Mono 一发出对象就删文件，
-     * 端点还没读到就已经没了——大文件必然播不了。</p>
-     */
-    private static Mono<ProxiedBody> store(Flux<DataBuffer> body, long declaredLength,
-        long maxBytes) {
-        return Mono.defer(() -> {
-            Flux<DataBuffer> bounded = enforceLimit(body, maxBytes);
-            boolean toFile = declaredLength > IN_MEMORY_LIMIT || declaredLength < 0;
-            if (!toFile) {
-                return DataBufferUtils.join(bounded)
-                    .map(joined -> {
-                        byte[] bytes = new byte[joined.readableByteCount()];
-                        joined.read(bytes);
-                        DataBufferUtils.release(joined);
-                        return ProxiedBody.of(bytes);
-                    })
-                    .switchIfEmpty(Mono.just(ProxiedBody.of(new byte[0])));
-            }
+    /** URL 查询串里已经带 SigV4 预签名参数（或旧式 Signature）时不再叠加头部签名。 */
+    private static boolean isPresigned(URI target) {
+        String query = target.getRawQuery();
+        if (query == null) {
+            return false;
+        }
+        String lowered = query.toLowerCase(Locale.ROOT);
+        return lowered.contains("x-amz-signature=") || lowered.contains("x-amz-algorithm=")
+            || lowered.contains("signature=");
+    }
 
-            return Mono.fromCallable(() -> Files.createTempFile("mdocs-media-", ".bin"))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(path -> DataBufferUtils.write(bounded, path)
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .then(Mono.fromCallable(() -> ProxiedBody.of(path, Files.size(path)))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                    // 写盘失败也要把半个临时文件清掉；成功路径交给调用方释放。
-                    .onErrorResume(error -> Mono.fromRunnable(() -> deleteQuietly(path))
-                        .subscribeOn(Schedulers.boundedElastic())
-                        .then(Mono.error(error))));
-        });
+    private Mono<UpstreamResponse> followRedirect(URI target, String location,
+        DocIndexSettings settings, List<String> allowedHosts, HttpMethod method,
+        HttpHeaders requestHeaders, int redirectCount, long maxBytes) {
+        if (redirectCount >= MAX_REDIRECTS) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "上游重定向次数过多"));
+        }
+        if (!StringUtils.hasText(location)) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "上游返回了没有 Location 的重定向"));
+        }
+        URI next;
+        try {
+            next = target.resolve(location.trim());
+        } catch (IllegalArgumentException exception) {
+            return Mono.error(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "上游重定向地址不合法"));
+        }
+        // 重定向目标必须重新过一遍允许清单与内网检查。
+        URI validated = validate(next.toString(), allowedHosts);
+        return request(validated, settings, allowedHosts, method, requestHeaders,
+            redirectCount + 1, maxBytes);
+    }
+
+    /** 读完一个不再需要的响应体（重定向、HEAD），让 WebClient 释放上游连接。 */
+    private static Mono<Void> drain(Flux<DataBuffer> body) {
+        return body.doOnNext(DataBufferUtils::release).then();
     }
 
     /**
-     * 按实际字节数截断上游响应：累计超过上限就中断并转成 502。
-     * 上游的 Content-Length 可能缺失或撒谎，所以上限只能落在流上。
+     * 错误状态统一在这里变成可读的 502：读一小段响应体，
+     * 是 S3 的 {@code <Code>} / {@code <Message>} XML 就提出来，否则带上状态码。
+     * 限制读取长度，避免为了报错把一个大响应拉下来。
      */
-    private static Flux<DataBuffer> enforceLimit(Flux<DataBuffer> body, long maxBytes) {
-        return Flux.defer(() -> {
-            AtomicLong counter = new AtomicLong();
-            return body
-                .takeWhile(buffer -> counter.addAndGet(buffer.readableByteCount()) <= maxBytes)
-                .concatWith(Flux.defer(() -> counter.get() > maxBytes
-                    ? Flux.error(tooLarge())
-                    : Flux.empty()));
-        });
-    }
-
-    /**
-     * 读一小段上游的错误文档，把 S3 的 {@code <Code>} / {@code <Message>} 提出来。
-     *
-     * <p>对象存储的鉴权失败、对象不存在都回 XML，只看 Content-Type 会误判成「类型不允许」。
-     * 限制读取长度，避免为了报错把一个大响应拉下来。</p>
-     */
-    private Mono<UpstreamResponse> readUpstreamError(ClientResponse response, HttpStatus status,
-        URI target) {
+    private static Mono<? extends Throwable> upstreamError(ClientResponse response, URI target) {
+        HttpStatus status = HttpStatus.resolve(response.statusCode().value());
         long limit = MAX_ERROR_SNIPPET;
         return DataBufferUtils.join(response.bodyToFlux(DataBuffer.class)
+                .takeWhile(buffer -> buffer.readableByteCount() <= limit)
+                .take(4))
+            .<Throwable>map(joined -> {
+                byte[] bytes = new byte[joined.readableByteCount()];
+                joined.read(bytes);
+                DataBufferUtils.release(joined);
+                String snippet = new String(bytes, StandardCharsets.UTF_8);
+                log.warn("媒体代理上游返回错误文档：status={} source={} body={}", status, target,
+                    snippet.replaceAll("\\s+", " ").trim());
+                return new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    describeUpstreamError(status, snippet));
+            })
+            .defaultIfEmpty(new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "上游返回 " + (status == null ? "未知状态" : status.value()) + "，响应体为空"));
+    }
+
+    /** 2xx / 3xx 但内容是 XML 文档：多半是对象存储把错误标成了别的状态。 */
+    private Mono<UpstreamResponse> readUpstreamError(HttpStatus status, HttpHeaders headers,
+        Flux<DataBuffer> body, URI target) {
+        long limit = MAX_ERROR_SNIPPET;
+        return DataBufferUtils.join(body
                 .takeWhile(buffer -> buffer.readableByteCount() <= limit)
                 .take(4))
             .<UpstreamResponse>map(joined -> {
@@ -352,7 +331,7 @@ public class MediaProxyService {
             .switchIfEmpty(Mono.<UpstreamResponse>fromSupplier(() -> {
                 log.warn("媒体代理上游返回错误文档（空响应）：status={} source={}", status, target);
                 throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
-                    "上游返回 " + status.value() + "，响应体为空");
+                    "上游返回 " + (status == null ? "未知状态" : status.value()) + "，响应体为空");
             }));
     }
 
@@ -370,7 +349,8 @@ public class MediaProxyService {
         if (!StringUtils.hasText(compact)) {
             return "上游返回 " + status.value() + "，响应体为空";
         }
-        return "上游返回 " + status.value() + "：" + compact.substring(0, Math.min(160, compact.length()));
+        return "上游返回 " + status.value() + "：" + compact.substring(0,
+            Math.min(160, compact.length()));
     }
 
     private static String extractXmlTag(String body, String tag) {
@@ -381,22 +361,16 @@ public class MediaProxyService {
         return matcher.find() ? matcher.group(1).trim() : null;
     }
 
-    private static void deleteQuietly(Path path) {        try {
-            Files.deleteIfExists(path);
-        } catch (IOException exception) {
-            log.warn("清理媒体代理临时文件失败：{}", path, exception);
-        }
-    }
-
     private static ResponseStatusException tooLarge() {
         return new ResponseStatusException(HttpStatus.BAD_GATEWAY, "媒体文件超过代理大小上限");
     }
 
-    private ProxiedMedia toProxiedMedia(UpstreamResponse upstream) {
-        HttpHeaders headers = upstream.headers();
+    private static ProxiedMedia toProxiedMedia(UpstreamResponse upstream) {
         HttpStatus status = upstream.status();
+        HttpHeaders headers = upstream.headers();
 
         if (status == null || status.isError()) {
+            // 理论走不到（错误状态在 onStatus 已拦截），保守兜底。
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                 "上游返回 " + (status == null ? "未知状态" : status.value()));
         }
@@ -424,15 +398,23 @@ public class MediaProxyService {
             responseHeaders.setCacheControl("public, max-age=3600");
         }
 
-        var body = status == HttpStatus.OK || status == HttpStatus.PARTIAL_CONTENT
-            ? upstream.body()
-            : ProxiedBody.of(new byte[0]);
-        return new ProxiedMedia(status, responseHeaders, body);
+        return new ProxiedMedia(status, responseHeaders, upstream.body());
     }
 
-    /** 只有这两个状态才有需要写回浏览器的响应体。 */
-    private static boolean hasBody(HttpStatus status) {
-        return status == HttpStatus.OK || status == HttpStatus.PARTIAL_CONTENT;
+    /**
+     * 按实际字节数截断上游响应：累计超过上限就中断。上游的 Content-Length
+     * 可能缺失或撒谎，声明长度这一关在 {@link #request} 里已判过，这里兜流上的。
+     * 响应头此时可能已写回浏览器，超限表现为连接中断，浏览器按网络错误处理。
+     */
+    private static Flux<DataBuffer> enforceLimit(Flux<DataBuffer> body, long maxBytes) {
+        return Flux.defer(() -> {
+            AtomicLong counter = new AtomicLong();
+            return body
+                .takeWhile(buffer -> counter.addAndGet(buffer.readableByteCount()) <= maxBytes)
+                .concatWith(Flux.defer(() -> counter.get() > maxBytes
+                    ? Flux.error(tooLarge())
+                    : Flux.empty()));
+        });
     }
 
     private static long maxBytes(DocIndexSettings settings) {
@@ -441,73 +423,52 @@ public class MediaProxyService {
         return Math.max(1048576L, Math.min(value, 2147483647L));
     }
 
-    /** 上游响应：状态码、响应头、已落地的响应体，以及判定后的类型与下载策略。 */
-    private record UpstreamResponse(HttpStatus status, HttpHeaders headers, ProxiedBody body,
-        String contentType, boolean attachment) {
+    /** 上游响应：状态码、响应头、流式响应体，以及判定后的类型与下载策略。 */
+    private record UpstreamResponse(HttpStatus status, HttpHeaders headers,
+        Flux<DataBuffer> body, String contentType, boolean attachment) {
     }
 
     /**
-     * 已经读下来的响应体。小文件在内存里，大文件在临时文件里；
-     * 临时文件由端点在响应终止后删除。
+     * 已经决定要写回浏览器的响应。响应体是直连上游的流：端点把它交给 WebFlux 后，
+     * 随写随转发；流终止（完成 / 出错 / 取消）时 WebClient 自动释放上游连接。
+     *
+     * <p>{@link #dispose()} 兜「响应造好了但 WebFlux 没来得及订阅响应体」的窗口
+     * （构建响应头出错、返回前被取消）：主动取消一次上游体，把连接收掉。</p>
      */
-    public static final class ProxiedBody {
+    public static final class ProxiedMedia {
 
-        private final byte[] bytes;
-        private final Path file;
-        private final long length;
+        private final HttpStatus status;
+        private final HttpHeaders headers;
+        private final Flux<DataBuffer> body;
+        private final AtomicBoolean subscribed = new AtomicBoolean();
 
-        private ProxiedBody(byte[] bytes, Path file, long length) {
-            this.bytes = bytes;
-            this.file = file;
-            this.length = length;
+        public ProxiedMedia(HttpStatus status, HttpHeaders headers, Flux<DataBuffer> body) {
+            this.status = status;
+            this.headers = headers;
+            this.body = body.doOnSubscribe(this::onSubscribe);
         }
 
-        static ProxiedBody of(byte[] bytes) {
-            return new ProxiedBody(bytes, null, bytes.length);
+        private void onSubscribe(Subscription subscription) {
+            subscribed.set(true);
         }
 
-        static ProxiedBody of(Path file, long length) {
-            return new ProxiedBody(null, file, length);
+        public HttpStatus status() {
+            return status;
         }
 
-        /** 供测试构造文件支撑的响应体。 */
-        public static ProxiedBody forTesting(Path file, long length) {
-            return new ProxiedBody(null, file, length);
+        public HttpHeaders headers() {
+            return headers;
         }
 
-        public long length() {
-            return length;
+        public Flux<DataBuffer> body() {
+            return body;
         }
 
-        /** 是否落在临时文件里（大文件分支），用于排查与测试。 */
-        public boolean isFileBacked() {
-            return file != null;
-        }
-
-        /** 临时文件路径；内存形态返回 null。 */
-        public Path backingFile() {
-            return file;
-        }
-
-        /** 每次订阅都从头读一遍，保证重试或写回失败后还能重放。 */
-        public Flux<DataBuffer> asFlux() {
-            if (file == null) {
-                return Flux.just(new DefaultDataBufferFactory().wrap(bytes));
-            }
-            return DataBufferUtils.read(file, new DefaultDataBufferFactory(), BUFFER_SIZE);
-        }
-
-        /** 释放临时文件；内存形态无需处理。 */
-        public void release() {
-            if (file != null) {
-                deleteQuietly(file);
+        /** 响应体从未被订阅时主动取消，释放上游连接；已被订阅则交给流的终止信号。 */
+        public void dispose() {
+            if (!subscribed.get()) {
+                body.subscribe().dispose();
             }
         }
-    }
-
-    /** 已经决定要写回浏览器的响应。 */
-    public record ProxiedMedia(HttpStatus status, HttpHeaders headers, ProxiedBody body) {
     }
 }
-
-

@@ -62,20 +62,31 @@ class MediaProxyUpstreamErrorTest {
     }
 
     @Test
-    void stillRejectsNonXmlTypesWithTheTypeMessage() {
-        var thrown = fetch("<html><body>hi</body></html>", "text/html");
+    void stillRejectsNonXmlSuccessTypesWithTheTypeMessage() {
+        var thrown = fetch("<html><body>hi</body></html>", "text/html", HttpStatus.OK);
 
         assertThat(thrown.getMessage()).contains("415");
         assertThat(thrown.getMessage()).contains("text/html");
     }
 
-    private static ResponseStatusException fetch(String body) {
-        return fetch(body, "application/xml");
+    /** 错误状态（非 XML 响应体）如实报上游状态，不再误报成「类型不允许」。 */
+    @Test
+    void reportsTheUpstreamStatusForNonXmlErrorBodies() {
+        var thrown = fetch("<html><body>hi</body></html>", "text/html", HttpStatus.BAD_REQUEST);
+
+        assertThat(thrown.getMessage()).contains("502");
+        assertThat(thrown.getMessage()).contains("400");
+        assertThat(thrown.getMessage()).doesNotContain("415");
     }
 
-    private static ResponseStatusException fetch(String body, String contentType) {
+    private static ResponseStatusException fetch(String body) {
+        return fetch(body, "application/xml", HttpStatus.BAD_REQUEST);
+    }
+
+    private static ResponseStatusException fetch(String body, String contentType,
+        HttpStatus status) {
         var service = new MediaProxyService(stubClient(contentType,
-            body.getBytes(StandardCharsets.UTF_8)));
+            body.getBytes(StandardCharsets.UTF_8), status));
         var settings = new DocIndexSettings();
         settings.setMediaProxyEnabled(true);
         settings.setMediaProxyAllowedHosts(List.of("bucket.abc.r2.cloudflarestorage.com"));
@@ -89,10 +100,10 @@ class MediaProxyUpstreamErrorTest {
         throw new AssertionError("预期抛出 ResponseStatusException");
     }
 
-    private static WebClient stubClient(String contentType, byte[] body) {
+    private static WebClient stubClient(String contentType, byte[] body, HttpStatus status) {
         return WebClient.builder()
             .exchangeFunction(request -> Mono.just(ClientResponse
-                .create(HttpStatus.BAD_REQUEST, ExchangeStrategies.withDefaults())
+                .create(status, ExchangeStrategies.withDefaults())
                 .headers(headers -> {
                     headers.set(HttpHeaders.CONTENT_TYPE, contentType);
                     headers.setContentLength(body.length);

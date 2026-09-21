@@ -26,8 +26,8 @@ import reactor.core.publisher.Mono;
  * <p>{@link MediaProxyService} 的真实链路测试：后两个用例不发网络请求，覆盖开关关闭、
  * 目标不在允许清单、环回地址这几条拒绝路径。</p>
  *
- * <p>第一个用例会真的去公网取一段视频，验证状态码透传、Content-Type、分段请求
- * （Range / Content-Range）与响应体落地。断网时该用例自动跳过，不影响常规回归。</p>
+ * <p>前两个用例会真的去公网取一段视频，验证状态码透传、Content-Type、分段请求
+ * （Range / Content-Range）与全量流式读回。断网时自动跳过，不影响常规回归。</p>
  */
 class MediaProxyServiceNetworkTest {
 
@@ -65,49 +65,39 @@ class MediaProxyServiceNetworkTest {
         assertThat(proxied.headers().getFirst(HttpHeaders.CONTENT_RANGE)).startsWith("bytes 0-2047/");
         assertThat(proxied.headers().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
 
-        byte[] bytes = readAll(proxied);
+        byte[] bytes = readAll(proxied.body());
         assertThat(bytes).isNotNull();
         assertThat(bytes.length).isEqualTo(2048);
-        // 分段请求应该原样转发长度，否则视频拖动进度会失效。
-        assertThat(proxied.body().length()).isEqualTo(2048);
-        proxied.body().release();
     }
 
     /**
-     * 关键回归：响应体跨过临时文件阈值时，文件必须在端点读完之前一直存在。
-     * 早先 store() 里用 usingWhen 释放，资源一发出对象就删文件，
-     * 这条用例是当时唯一能发现「大文件必然播不了」的覆盖。
+     * 关键回归：媒体必须流式转发。早先实现把整个响应体先落临时文件再回给浏览器，
+     * 视频首帧要等完整下载、每次拖动进度都重新全量拉取，等于不可播。
+     * 现在响应头一到就返回，响应体完整、按序地流出。
+     * （多兆字节的流式回写在 MediaProxyEndpointTest 里用本地真实服务器覆盖，
+     * 这里只做单文件全量验证。）
      */
     @Test
-    void servesLargeMediaThroughTheTempFilePath() {
-        Assumptions.assumeTrue(reachable(LARGE_MP4_HOST, 443),
-            "公网不可达，跳过临时文件分支验证");
+    void servesTheWholeFileByStreaming() {
+        Assumptions.assumeTrue(reachable("www.w3schools.com", 443),
+            "公网不可达，跳过全量流式验证");
 
         var settings = new DocIndexSettings();
         settings.setMediaProxyEnabled(true);
-        settings.setMediaProxyAllowedHosts(List.of(LARGE_MP4_HOST));
+        settings.setMediaProxyAllowedHosts(List.of("www.w3schools.com"));
         settings.setMediaProxyMaxBytes(64 * 1024 * 1024);
 
         var proxied = new MediaProxyService()
-            .fetch(LARGE_MP4, settings, HttpMethod.GET, new HttpHeaders())
-            .block(Duration.ofSeconds(180));
+            .fetch(PUBLIC_MP4, settings, HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(60));
 
         assertThat(proxied).isNotNull();
         assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
-        // 走的是临时文件分支，而不是把整个视频读进堆。
-        assertThat(proxied.body().isFileBacked()).isTrue();
-        assertThat(proxied.body().length()).isEqualTo(LARGE_MP4_BYTES);
+        assertThat(proxied.headers().getContentLength()).isEqualTo(PUBLIC_MP4_BYTES);
 
-        // 读得到内容，说明文件没有在 store() 返回时就消失。
-        byte[] bytes = readAll(proxied);
+        byte[] bytes = readAll(proxied.body());
         assertThat(bytes).isNotNull();
-        assertThat(bytes.length).isEqualTo((int) LARGE_MP4_BYTES);
-
-        Path backingFile = proxied.body().backingFile();
-        assertThat(backingFile).exists();
-        proxied.body().release();
-        assertThat(backingFile).doesNotExist();
-        assertThat(proxied.body().length()).isEqualTo(LARGE_MP4_BYTES);
+        assertThat(bytes.length).isEqualTo((int) PUBLIC_MP4_BYTES);
     }
 
     @Test
@@ -128,8 +118,8 @@ class MediaProxyServiceNetworkTest {
             .hasMessageContaining("502");
     }
 
-    private static byte[] readAll(MediaProxyService.ProxiedMedia proxied) {
-        return DataBufferUtils.join(proxied.body().asFlux())
+    private static byte[] readAll(Flux<org.springframework.core.io.buffer.DataBuffer> body) {
+        return DataBufferUtils.join(body)
             .map(buffer -> {
                 byte[] content = new byte[buffer.readableByteCount()];
                 buffer.read(content);
@@ -158,8 +148,7 @@ class MediaProxyServiceNetworkTest {
         assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
         assertThat(proxied.headers().getFirst(HttpHeaders.CONTENT_TYPE)).isEqualTo("video/webm");
         assertThat(proxied.headers().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
-        assertThat(readAll(proxied)).isEqualTo(body);
-        proxied.body().release();
+        assertThat(readAll(proxied.body())).isEqualTo(body);
     }
 
     /** 上游把 HTML 标成图片扩展名时仍要拒绝，不能被扩展名兜底洗白。 */
