@@ -314,32 +314,22 @@ public final class MediaProxyRules {
     record SigningRule(String hostPattern, String accessKey, String secretKey, String region) {
     }
 
-    /** 解析签名凭证规则；缺 access 或 secret 的整条丢弃。 */
+    /**
+     * 解析签名凭证规则；缺 access 或 secret 的整条丢弃。
+     *
+     * <p>列表元素可能是两种形态：设置页保存的「一行一条」，或设置服务归一化后
+     * 「同一主机的键值归并成单个元素、内嵌换行」。这里统一按行拆开再解析——
+     * 否则归一化形态的值会带上换行被当成注入拒掉，设置页配好的凭证永远不生效，
+     * 私有桶请求全部裸奔（R2 回 400 InvalidArgument/Authorization）。</p>
+     */
     static List<SigningRule> parseSigningRules(List<String> lines) {
         Map<String, String[]> grouped = new java.util.LinkedHashMap<>();
-        for (String line : lines == null ? List.<String>of() : lines) {
-            if (!StringUtils.hasText(line)) {
+        for (String raw : lines == null ? List.<String>of() : lines) {
+            if (!StringUtils.hasText(raw)) {
                 continue;
             }
-            String[] parts = line.split(":", 3);
-            if (parts.length < 3) {
-                continue;
-            }
-            String pattern = parts[0].trim().toLowerCase(Locale.ROOT);
-            String key = parts[1].trim().toLowerCase(Locale.ROOT);
-            String value = parts[2].trim();
-            if (!isValidHostSyntax(pattern) || value.isEmpty() || value.length() > 512
-                || value.contains("\r") || value.contains("\n")) {
-                continue;
-            }
-            if (!key.equals("access") && !key.equals("secret") && !key.equals("region")) {
-                continue;
-            }
-            String[] entry = grouped.computeIfAbsent(pattern, ignored -> new String[3]);
-            switch (key) {
-                case "access" -> entry[0] = value;
-                case "secret" -> entry[1] = value;
-                default -> entry[2] = value;
+            for (String line : raw.split("\\R")) {
+                parseSigningRuleLine(line, grouped);
             }
         }
 
@@ -352,6 +342,32 @@ public final class MediaProxyRules {
             rules.add(new SigningRule(pattern, entry[0], entry[1], region));
         });
         return List.copyOf(rules);
+    }
+
+    private static void parseSigningRuleLine(String line, Map<String, String[]> grouped) {
+        if (!StringUtils.hasText(line)) {
+            return;
+        }
+        String[] parts = line.split(":", 3);
+        if (parts.length < 3) {
+            return;
+        }
+        String pattern = parts[0].trim().toLowerCase(Locale.ROOT);
+        String key = parts[1].trim().toLowerCase(Locale.ROOT);
+        String value = parts[2].trim();
+        if (!isValidHostSyntax(pattern) || value.isEmpty() || value.length() > 512
+            || value.contains("\r") || value.contains("\n")) {
+            return;
+        }
+        if (!key.equals("access") && !key.equals("secret") && !key.equals("region")) {
+            return;
+        }
+        String[] entry = grouped.computeIfAbsent(pattern, ignored -> new String[3]);
+        switch (key) {
+            case "access" -> entry[0] = value;
+            case "secret" -> entry[1] = value;
+            default -> entry[2] = value;
+        }
     }
 
     /** 取第一个命中该主机的签名规则；没有则返回 null（表示按普通请求头发）。 */

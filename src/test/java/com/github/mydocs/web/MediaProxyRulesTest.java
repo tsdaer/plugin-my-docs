@@ -178,6 +178,32 @@ class MediaProxyRulesTest {
         assertThat(MediaProxyRules.resolveSigningRule(rules, "evil.com")).isNull();
     }
 
+    /**
+     * 设置服务归一化后的形态：同一主机的键值归并成单个元素、内嵌换行。
+     * 解析必须两种形态都能读，否则设置页配好的凭证永远不生效。
+     */
+    @Test
+    void parsesMergedMultilineRuleElementsFromTheSettingsService() {
+        var rules = MediaProxyRules.parseSigningRules(List.of(
+            "media.example.com: access: AKIDEXAMPLE\n"
+                + "media.example.com: secret: wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY\n"
+                + "media.example.com: region: apac",
+            // 与逐行形态混用也不互相干扰
+            "bucket.abc.r2.cloudflarestorage.com: access: R2KEY",
+            "bucket.abc.r2.cloudflarestorage.com: secret: R2SECRET"));
+
+        assertThat(rules).hasSize(2);
+        assertThat(MediaProxyRules.resolveSigningRule(rules, "media.example.com"))
+            .isNotNull()
+            .satisfies(rule -> {
+                assertThat(rule.accessKey()).isEqualTo("AKIDEXAMPLE");
+                assertThat(rule.secretKey()).isEqualTo("wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY");
+                assertThat(rule.region()).isEqualTo("apac");
+            });
+        assertThat(MediaProxyRules.resolveSigningRule(rules,
+            "bucket.abc.r2.cloudflarestorage.com")).isNotNull();
+    }
+
     @Test
     void extractsSourceFromProxyUrl() {
         assertThat(MediaProxyRules.sourceOf(

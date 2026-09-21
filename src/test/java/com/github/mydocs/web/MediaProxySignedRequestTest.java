@@ -98,6 +98,40 @@ class MediaProxySignedRequestTest {
         assertThat(first(captured.get(), "x-amz-date")).isNull();
     }
 
+    /**
+     * 关键回归：设置服务会把同一主机的凭证归并成「单个元素、内嵌换行」的形态
+     * （{@code host: access: X\nhost: secret: Y}）。签名解析若把元素当一行处理，
+     * 值里就会带上换行而被整条拒绝——设置页配好的凭证在生产上从未生效过，
+     * 现象就是 R2 回 400 InvalidArgument/Authorization。这条用例走完整的
+     * 「UI 两行凭证 → 设置服务归一化 → 代理签名」链路。
+     */
+    @Test
+    void signsRequestsUsingSettingsNormalizedByTheSettingsService() {
+        var uiShaped = new DocIndexSettings();
+        uiShaped.setMediaProxyEnabled(true);
+        uiShaped.setMediaProxyAllowedHosts(List.of("bucket.abc.r2.cloudflarestorage.com"));
+        uiShaped.setMediaProxyCredentialRules(List.of(
+            "bucket.abc.r2.cloudflarestorage.com: access: " + ACCESS_KEY,
+            "bucket.abc.r2.cloudflarestorage.com: secret: " + SECRET_KEY));
+        run.halo.app.plugin.ReactiveSettingFetcher fetcher =
+            org.mockito.Mockito.mock(run.halo.app.plugin.ReactiveSettingFetcher.class);
+        org.mockito.Mockito
+            .when(fetcher.fetch(org.mockito.ArgumentMatchers.eq(DocIndexSettingsService.BASIC_GROUP),
+                org.mockito.ArgumentMatchers.any()))
+            .thenReturn(Mono.just(uiShaped));
+        var normalized = new DocIndexSettingsService(fetcher).fetch().block(Duration.ofSeconds(10));
+
+        var captured = new AtomicReference<Map<String, List<String>>>();
+        var service = new MediaProxyService(stubClient(captured));
+
+        service.fetch(SOURCE, normalized, HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(20));
+
+        assertThat(first(captured.get(), "Authorization"))
+            .as("设置服务归一化后的凭证形态必须仍能完成签名")
+            .startsWith("AWS4-HMAC-SHA256 Credential=" + ACCESS_KEY + "/");
+    }
+
     @Test
     void refusesToExposeCredentialsToUnlistedHosts() {
         var captured = new AtomicReference<Map<String, List<String>>>();

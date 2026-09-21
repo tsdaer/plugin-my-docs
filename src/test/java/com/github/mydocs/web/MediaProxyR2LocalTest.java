@@ -132,6 +132,33 @@ class MediaProxyR2LocalTest {
         assertThat(joined).isEqualTo(whole);
     }
 
+    /**
+     * 生产链路回归：设置页保存的两行凭证经 DocIndexSettingsService 归一化
+     * （同主机键值归并成内嵌换行的单个元素）后，代理仍必须能完成签名。
+     * 1.7.3 之前这条链路解析不出签名规则，私有桶请求全部裸奔。
+     */
+    @Test
+    void signsThroughTheSettingsServiceNormalizationPipeline() {
+        var config = configOrNull();
+        var uiShaped = settings(config, true);
+        run.halo.app.plugin.ReactiveSettingFetcher fetcher =
+            org.mockito.Mockito.mock(run.halo.app.plugin.ReactiveSettingFetcher.class);
+        org.mockito.Mockito
+            .when(fetcher.fetch(
+                org.mockito.ArgumentMatchers.eq(DocIndexSettingsService.BASIC_GROUP),
+                org.mockito.ArgumentMatchers.any()))
+            .thenReturn(reactor.core.publisher.Mono.just(uiShaped));
+        var normalized = new DocIndexSettingsService(fetcher).fetch().block(Duration.ofSeconds(10));
+
+        var proxied = new MediaProxyService()
+            .fetch(config.url(), normalized, HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(30));
+
+        assertThat(proxied).isNotNull();
+        assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
+        assertThat(collect(proxied.body()).length).isPositive();
+    }
+
     /** 播放器预加载元信息：HEAD 只要响应头，签名同样有效。 */
     @Test
     void servesHeadWithSigV4Credentials() {
