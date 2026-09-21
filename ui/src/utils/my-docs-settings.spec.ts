@@ -192,6 +192,54 @@ describe('my-docs settings', () => {
     })
   })
 
+  it('round-trips every declared field without dropping any', () => {
+    // 设置页保存时会整组覆盖 ConfigMap，任何一个字段在解析里漏掉都会被静默清空。
+    // 这里给每个字段都塞上非默认值，再走一遍序列化 → 解析，逐字段比对。
+    const full = {
+      defaultSort: 'titleAsc',
+      defaultLibraryName: 'guide',
+      libraryIndexDefaultColumns: 3,
+      libraryIndexDefaultMaxRows: 4,
+      libraryIndexPageLayouts: [{ page: 2, maxRows: 1 }],
+      libraryIndexRowLayouts: [{ row: 5, columns: 4 }],
+      libraryIndexPlacements: [{ libraryName: 'guide', row: 2, column: 3 }],
+      libraryIndexFolderTitles: [{ row: 2, column: 3, title: '合集', description: '说明' }],
+      renderContentThemeLightUrl: 'https://cdn.example.com/light.css',
+      renderContentThemeDarkUrl: 'https://cdn.example.com/dark.css',
+      renderContentThemeLightClass: 'markdown-body',
+      renderContentThemeDarkClass: 'markdown-body dark',
+      renderCodeThemeLight: 'github',
+      renderCodeThemeDark: 'monokai',
+      renderLineNumber: true,
+      renderAutoSpace: true,
+      renderGfmAutoLink: false,
+      renderFootnotes: false,
+      renderMark: true,
+      renderFixTermTypo: true,
+      renderParagraphBeginningSpace: true,
+      renderCodeBlockPreview: false,
+      renderMathBlockPreview: false,
+      renderCopyButtons: false,
+      renderImageZoom: false,
+      renderMediaEmbed: false,
+      mediaProxyEnabled: true,
+      mediaProxyAllowedHosts: ['media.example.com'],
+      mediaProxyRequestHeaders: ['media.example.com: X-Token: t'],
+      mediaProxyCredentialRules: ['media.example.com: access: K', 'media.example.com: secret: S'],
+      mediaProxyMaxBytes: 10485760,
+      customHeadHtml: '<style></style>',
+      customBodyHtml: '<script></script>',
+    }
+
+    const parsed = parseMyDocsSettings(JSON.stringify(full))
+
+    Object.entries(full).forEach(([key, expected]) => {
+      expect(parsed[key as keyof typeof parsed], `字段 ${key} 在解析后被改动或丢弃`).toEqual(expected)
+    })
+    // 反向也要一致：解析结果里不应多出未声明的字段。
+    expect(Object.keys(parsed).sort()).toEqual(Object.keys(defaultMyDocsSettings).sort())
+  })
+
   it('clamps the proxy size limit and defaults the media switches', () => {
     const defaults = parseMyDocsSettings()
     expect(defaults.renderCopyButtons).toBe(true)
@@ -211,3 +259,4 @@ describe('my-docs settings', () => {
     ).toBe(536870912)
   })
 })
+

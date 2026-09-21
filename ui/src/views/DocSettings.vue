@@ -12,12 +12,19 @@ import {
 import { coreApiClient, axiosInstance } from '@halo-dev/api-client'
 import type { ConfigMap } from '@halo-dev/api-client'
 import { isAxiosError } from 'axios'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useRouter } from 'vue-router'
 import RiArrowLeftLine from '~icons/ri/arrow-left-line'
 import { DocLibraryV1alpha1Api, DocV1alpha1Api } from '@/api/generated'
 import type { Doc, DocLibrary } from '@/api/generated'
+import {
+  SETTINGS_SECTIONS,
+  readScrollMetrics,
+  resolveActiveSection,
+  resolveScrollContainer,
+  serializeForComparison,
+} from '@/utils/settings-navigation'
 import {
   buildMyDocsBackup,
   buildMyDocsBackupFilename,
@@ -105,14 +112,75 @@ const importInput = ref<HTMLInputElement | null>(null)
 const renderThemeMode = ref<'light' | 'dark'>('light')
 
 const settingsState = ref<MyDocsSettings>(parseMyDocsSettings())
+/** 最近一次落库的快照，用来判断有没有未保存的改动。 */
+const savedSnapshot = ref<string>(serializeForComparison(settingsState.value))
+
+const isDirty = computed(
+  () => serializeForComparison(settingsState.value) !== savedSnapshot.value,
+)
+const activeSectionIndex = ref(0)
+const settingsSections = SETTINGS_SECTIONS
+/** 代理开关打开时自动展开主机与凭证区，省掉一次点击。 */
+const mediaProxyAdvancedOpen = ref(false)
+const mediaProxyEnabled = computed(() => !!settingsState.value.mediaProxyEnabled)
 
 watch(
   () => configMap.value?.data?.[MY_DOCS_CONFIG_GROUP],
   (raw) => {
     settingsState.value = parseMyDocsSettings(raw)
+    savedSnapshot.value = serializeForComparison(settingsState.value)
   },
   { immediate: true },
 )
+
+function scrollToSection(id: string, index: number) {
+  // 点击即视为选中，避免滚动监听找不到容器时导航不动。
+  activeSectionIndex.value = index
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** 实际发生滚动的容器：控制台外壳可能用内部滚动区，window 上不会有 scroll 事件。 */
+let scrollContainer: Element | null = null
+
+function syncActiveSection() {
+  if (!scrollContainer) {
+    return
+  }
+  const metrics = readScrollMetrics(scrollContainer)
+  const containerTop =
+    scrollContainer === document.documentElement
+      ? 0
+      : scrollContainer.getBoundingClientRect().top
+
+  const offsets = settingsSections
+    .map((section) => document.getElementById(section.id))
+    .map((element) =>
+      element ? element.getBoundingClientRect().top - containerTop + metrics.scrollTop : null,
+    )
+    .filter((offset): offset is number => offset !== null)
+  if (!offsets.length) {
+    return
+  }
+
+  activeSectionIndex.value = resolveActiveSection({ ...metrics, offsets })
+}
+
+onMounted(() => {
+  // 从表单往上找真正溢出的滚动祖先；找不到就是 window/documentElement。
+  scrollContainer = resolveScrollContainer(
+    document.getElementById('section-data') ?? document.body,
+    document.documentElement,
+  )
+  scrollContainer.addEventListener('scroll', syncActiveSection, { passive: true })
+  window.addEventListener('resize', syncActiveSection)
+  nextTick(syncActiveSection)
+})
+
+onBeforeUnmount(() => {
+  scrollContainer?.removeEventListener('scroll', syncActiveSection)
+  scrollContainer = null
+  window.removeEventListener('resize', syncActiveSection)
+})
 
 const libraryOptions = computed(() => [
   { label: '不指定', value: '' },
@@ -129,8 +197,12 @@ const placementLibraryOptions = computed(() =>
   })),
 )
 
-function createPageLayout(): LibraryPageLayoutSetting {
-  const nextPage =
+/** 列表分组标题右侧的计数，省得自己数。 */
+function listCount(items: readonly unknown[] | undefined): string {
+  return items?.length ? `共 ${items.length} 项` : ''
+}
+
+function createPageLayout(): LibraryPageLayoutSetting {  const nextPage =
     Math.max(0, ...settingsState.value.libraryIndexPageLayouts.map((item) => item.page || 0)) + 1
   return {
     page: nextPage,
@@ -373,6 +445,8 @@ async function persistSettings(normalized: MyDocsSettings) {
     configMap: next,
   })
 
+  // 落库成功后才刷新快照：失败时保持「有未保存的改动」，按钮仍可重试。
+  savedSnapshot.value = serializeForComparison(finalSettings)
   Toast.success('设置已保存')
   await queryClient.invalidateQueries({ queryKey: ['my-docs-settings-configmap'] })
 }
@@ -654,6 +728,15 @@ async function handleImportFileChange(event: Event) {
   }
 }
 
+async function saveSettings(normalized: MyDocsSettings) {
+  try {
+    await persistSettings(normalized)
+  } catch (error) {
+    // 保存失败必须让用户看见：改动仍在（isDirty 保持 true），按钮可重试。
+    Toast.warning(getErrorMessage(error, '保存设置失败'))
+  }
+}
+
 async function handleSubmit() {
   const normalized = parseMyDocsSettings(stringifyMyDocsSettings(settingsState.value))
   const issues = buildLayoutWarnings(normalized)
@@ -664,13 +747,13 @@ async function handleSubmit() {
       description: issues.join('\n'),
       confirmType: 'danger',
       onConfirm: async () => {
-        await persistSettings(normalized)
+        await saveSettings(normalized)
       },
     })
     return
   }
 
-  await persistSettings(normalized)
+  await saveSettings(normalized)
 }
 </script>
 
@@ -702,29 +785,61 @@ async function handleSubmit() {
         :actions="false"
         @submit="handleSubmit"
       >
-        <div class="doc-settings-section">
-          <h3 class="doc-settings-title">备份与恢复</h3>
-          <p class="doc-settings-help">
-            导出文件会包含当前设置、全部文档库以及文档 Markdown
-            内容。加载时会按快照覆盖并恢复这些数据。
-          </p>
-          <VSpace>
-            <VButton type="secondary" :loading="isExporting" @click="handleExport">
-              导出设置
-            </VButton>
-            <VButton :loading="isImporting" @click="handleOpenImport"> 加载设置 </VButton>
-          </VSpace>
-          <input
-            ref="importInput"
-            accept=".json,application/json"
-            class="hidden"
-            type="file"
-            @change="handleImportFileChange"
-          />
-        </div>
+        <div class="doc-settings-shell">
+          <nav class="doc-settings-nav" aria-label="设置分组">
+            <a
+              v-for="(section, index) in settingsSections"
+              :key="section.id"
+              class="doc-settings-nav-item"
+              :class="{ 'is-active': index === activeSectionIndex }"
+              :href="`#${section.id}`"
+              :title="section.hint"
+              @click.prevent="scrollToSection(section.id, index)"
+            >
+              {{ section.label }}
+            </a>
+          </nav>
 
-        <div class="doc-settings-section">
-          <h3 class="doc-settings-title">基础设置</h3>
+          <div class="doc-settings-body">
+          <div class="doc-settings-toolbar">
+            <span v-if="isDirty" class="doc-settings-dirty">有未保存的改动</span>
+            <span v-else class="doc-settings-saved">当前设置已保存</span>
+            <VSpace>
+              <VButton
+                type="secondary"
+                :disabled="!isDirty"
+                :loading="isImporting"
+                @click="$formkit.submit('my-docs-settings-form')"
+              >
+                保存设置
+              </VButton>
+              <VButton @click="router.push({ name: 'DocLibraries' })">取消</VButton>
+            </VSpace>
+          </div>
+
+          <div id="section-data" class="doc-settings-section">
+            <h3 class="doc-settings-title">备份与恢复</h3>
+            <p class="doc-settings-help">
+              导出文件会包含当前设置、全部文档库以及文档 Markdown
+              内容。加载时会按快照覆盖并恢复这些数据。
+            </p>
+            <VSpace>
+              <VButton type="secondary" :loading="isExporting" @click="handleExport">
+                导出设置
+              </VButton>
+              <VButton :loading="isImporting" @click="handleOpenImport"> 加载设置 </VButton>
+            </VSpace>
+            <input
+              ref="importInput"
+              accept=".json,application/json"
+              class="hidden"
+              type="file"
+              @change="handleImportFileChange"
+            />
+          </div>
+
+          <div id="section-basic" class="doc-settings-section">
+            <h3 class="doc-settings-title">基础设置</h3>
           <div class="doc-settings-grid doc-settings-grid--compact">
             <FormKit
               type="select"
@@ -748,8 +863,8 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div class="doc-settings-section">
-          <h3 class="doc-settings-title">文档库首页布局</h3>
+          <div id="section-layout" class="doc-settings-section">
+            <h3 class="doc-settings-title">文档库首页布局</h3>
           <p class="doc-settings-help">
             每一行都会按照固定槽位宽度排布。默认每行 2
             个；特定行可单独改列数，文档库也可指定到具体坐标。
@@ -774,7 +889,7 @@ async function handleSubmit() {
 
           <div class="doc-settings-list-section">
             <div class="doc-settings-list-head">
-              <h4>特定行列数</h4>
+              <h4>特定行列数<span v-if="settingsState.libraryIndexRowLayouts.length" class="doc-settings-count">{{ listCount(settingsState.libraryIndexRowLayouts) }}</span></h4>
               <VButton size="sm" type="secondary" @click="addRowLayout">新增行设置</VButton>
             </div>
             <p class="doc-settings-help">
@@ -807,7 +922,7 @@ async function handleSubmit() {
 
           <div class="doc-settings-list-section">
             <div class="doc-settings-list-head">
-              <h4>特定页设置</h4>
+              <h4>特定页设置<span v-if="settingsState.libraryIndexPageLayouts.length" class="doc-settings-count">{{ listCount(settingsState.libraryIndexPageLayouts) }}</span></h4>
               <VButton size="sm" type="secondary" @click="addPageLayout">新增页设置</VButton>
             </div>
             <p class="doc-settings-help">
@@ -840,7 +955,7 @@ async function handleSubmit() {
 
           <div class="doc-settings-list-section">
             <div class="doc-settings-list-head">
-              <h4>文档库坐标</h4>
+              <h4>文档库坐标<span v-if="settingsState.libraryIndexPlacements.length" class="doc-settings-count">{{ listCount(settingsState.libraryIndexPlacements) }}</span></h4>
               <VButton size="sm" type="secondary" @click="addPlacement">新增文档库坐标</VButton>
             </div>
             <p class="doc-settings-help">
@@ -886,7 +1001,7 @@ async function handleSubmit() {
 
           <div class="doc-settings-list-section">
             <div class="doc-settings-list-head">
-              <h4>文件夹名称</h4>
+              <h4>文件夹名称<span v-if="settingsState.libraryIndexFolderTitles.length" class="doc-settings-count">{{ listCount(settingsState.libraryIndexFolderTitles) }}</span></h4>
               <VButton size="sm" type="secondary" @click="addFolderTitle">新增坐标标题</VButton>
             </div>
             <p class="doc-settings-help">
@@ -926,8 +1041,8 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div class="doc-settings-section">
-          <h3 class="doc-settings-title">文档页面渲染</h3>
+          <div id="section-render" class="doc-settings-section">
+            <h3 class="doc-settings-title">文档页面渲染</h3>
           <p class="doc-settings-help">
             这些设置仅用于前台文档阅读页。内容与代码主题会跟随 Halo 当前的明暗模式切换。
           </p>
@@ -1096,12 +1211,12 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div class="doc-settings-section">
+        <div id="section-media" class="doc-settings-section">
           <h3 class="doc-settings-title">视频与媒体代理</h3>
           <p class="doc-settings-help">
             用图片语法（<code>![](demo.mp4)</code>）指向视频文件时，前台会渲染成内嵌播放器。
             如果视频放在不对公网开放的对象存储上（附件只记录裸对象地址，浏览器直连会拿到
-            400 / 403），可以打开媒体同域代理：命中下方允许清单的图片、音视频地址会改写成站点
+            400 / 403），可以打开媒体同域代理：命中允许清单的图片、音视频地址会改写成站点
             自身的 <code>/media-proxy</code> 地址，由服务端代取，前台只与站点同域通信。
           </p>
           <div class="doc-settings-grid">
@@ -1116,63 +1231,80 @@ async function handleSubmit() {
               type="switch"
               name="mediaProxyEnabled"
               label="媒体同域代理"
-              help="仅对下方允许清单内的主机生效；关闭或清单为空时不做任何改写。"
+              help="仅对允许清单内的主机生效；关闭或清单为空时不做任何改写。"
               v-model="settingsState.mediaProxyEnabled"
             />
           </div>
-          <div class="doc-settings-grid">
-            <FormKit
-              type="textarea"
-              name="mediaProxyAllowedHosts"
-              label="媒体代理允许主机"
-              help="每行一个主机名，例如 media.example.com 或 *.r2.cloudflarestorage.com（支持通配与 :端口）。留空即完全关闭代理。"
-              :rows="4"
-              :model-value="settingsState.mediaProxyAllowedHosts.join('\n')"
-              @update:model-value="
-                settingsState.mediaProxyAllowedHosts = readSettingsLines($event as string)
-              "
-            />
-            <FormKit
-              type="textarea"
-              name="mediaProxyRequestHeaders"
-              label="媒体代理附加请求头"
-              help="可选，每行一条，格式为「主机: 头名: 头值」，例如 media.example.com: Authorization: Bearer xxx。主机不要带端口。仅对允许清单内的主机生效，用于私有对象存储。"
-              :rows="4"
-              :model-value="settingsState.mediaProxyRequestHeaders.join('\n')"
-              @update:model-value="
-                settingsState.mediaProxyRequestHeaders = readSettingsLines($event as string)
-              "
-            />
-            <FormKit
-              type="textarea"
-              name="mediaProxyCredentialRules"
-              label="媒体代理签名凭证"
-              help="私有桶用。每行一条「主机: 键: 值」，键取 access、secret，可选 region（默认 auto）。R2 / S3 不认静态 Bearer，GetObject 必须是签名请求，所以凭证填这里。"
-              :rows="4"
-              :model-value="settingsState.mediaProxyCredentialRules.join('\n')"
-              @update:model-value="
-                settingsState.mediaProxyCredentialRules = readSettingsLines($event as string)
-              "
-            />
-            <FormKit
-              type="number"
-              name="mediaProxyMaxBytes"
-              label="媒体代理大小上限（字节）"
-              help="单个媒体文件超过该值时中断，默认 536870912（512 MiB），最小 1048576。"
-              :min="MEDIA_PROXY_MIN_BYTES"
-              :max="MEDIA_PROXY_MAX_BYTES"
-              step="1048576"
-              v-model="settingsState.mediaProxyMaxBytes"
-            />
-          </div>
-          <p class="doc-settings-help">
-            ⚠️ 代理端点对访客开放，而请求头规则只按主机匹配、没有路径限制：一旦配上凭证，
-            任何访客都能取该主机下的任意对象，不只是文档引用过的那些。请只把确实需要公开的媒体主机
-            写进允许清单，凭证也请用只读、可随时吊销的那种。
-          </p>
+
+          <details
+            class="doc-settings-details"
+            :open="mediaProxyEnabled || mediaProxyAdvancedOpen"
+            @toggle="
+              mediaProxyAdvancedOpen = ($event.target as HTMLDetailsElement).open
+            "
+          >
+            <summary>
+              代理主机与凭证
+              <span class="doc-settings-details-hint">
+                私有桶需要填签名凭证才能取到文件
+              </span>
+            </summary>
+            <div class="doc-settings-details-body">
+              <div class="doc-settings-grid">
+                <FormKit
+                  type="textarea"
+                  name="mediaProxyAllowedHosts"
+                  label="媒体代理允许主机"
+                  help="每行一个主机名，例如 media.example.com 或 *.r2.cloudflarestorage.com（支持通配与 :端口）。留空即完全关闭代理。"
+                  :rows="4"
+                  :model-value="settingsState.mediaProxyAllowedHosts.join('\n')"
+                  @update:model-value="
+                    settingsState.mediaProxyAllowedHosts = readSettingsLines($event as string)
+                  "
+                />
+                <FormKit
+                  type="textarea"
+                  name="mediaProxyCredentialRules"
+                  label="媒体代理签名凭证"
+                  help="私有桶用。每行一条「主机: 键: 值」，键取 access、secret，可选 region（默认 auto）。R2 / S3 不认静态 Bearer，GetObject 必须是签名请求，所以凭证填这里。"
+                  :rows="4"
+                  :model-value="settingsState.mediaProxyCredentialRules.join('\n')"
+                  @update:model-value="
+                    settingsState.mediaProxyCredentialRules = readSettingsLines($event as string)
+                  "
+                />
+                <FormKit
+                  type="textarea"
+                  name="mediaProxyRequestHeaders"
+                  label="媒体代理附加请求头"
+                  help="可选，每行一条，格式为「主机: 头名: 头值」，例如 media.example.com: Authorization: Bearer xxx。仅用于非 S3 签名的网关；主机不要带端口。"
+                  :rows="3"
+                  :model-value="settingsState.mediaProxyRequestHeaders.join('\n')"
+                  @update:model-value="
+                    settingsState.mediaProxyRequestHeaders = readSettingsLines($event as string)
+                  "
+                />
+                <FormKit
+                  type="number"
+                  name="mediaProxyMaxBytes"
+                  label="媒体代理大小上限（字节）"
+                  help="单个媒体文件超过该值时中断，默认 536870912（512 MiB），最小 1048576。"
+                  :min="MEDIA_PROXY_MIN_BYTES"
+                  :max="MEDIA_PROXY_MAX_BYTES"
+                  step="1048576"
+                  v-model="settingsState.mediaProxyMaxBytes"
+                />
+              </div>
+              <p class="doc-settings-help doc-settings-help--warn">
+                ⚠️ 代理端点对访客开放，而凭证只按主机匹配、没有路径限制：一旦配上凭证，
+                任何访客都能取该主机下的任意对象，不只是文档引用过的那些。请只把确实需要公开的媒体
+                主机写进允许清单，凭证也请用只读、可随时吊销的那种。
+              </p>
+            </div>
+          </details>
         </div>
 
-        <div class="doc-settings-section">
+        <div id="section-code" class="doc-settings-section">
           <h3 class="doc-settings-title">全局自定义代码</h3>
           <p class="doc-settings-help">
             ⚠️ 以下代码会原样注入到全部文档阅读页，并在访客浏览器中执行。请仅填入你信任的代码——
@@ -1199,7 +1331,7 @@ async function handleSubmit() {
           </div>
         </div>
 
-        <div class="doc-settings-section">
+        <div id="section-ai" class="doc-settings-section">
           <h3 class="doc-settings-title">AI 辅助编写</h3>
           <p class="doc-settings-help">
             复制下面的提示词发给 AI 智能体（如 ChatGPT、Claude），它会按 my-docs
@@ -1217,22 +1349,172 @@ async function handleSubmit() {
           </VSpace>
         </div>
 
-        <VSpace>
-          <VButton
-            type="secondary"
-            :loading="isImporting"
-            @click="$formkit.submit('my-docs-settings-form')"
-          >
-            保存设置
-          </VButton>
-          <VButton @click="router.push({ name: 'DocLibraries' })">取消</VButton>
-        </VSpace>
+          </div>
+        </div>
       </FormKit>
     </VCard>
   </div>
 </template>
 
 <style scoped>
+/* 左侧分组导航 + 右侧设置主体；窄屏时导航变成顶部横向滚动条。 */
+.doc-settings-shell {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.doc-settings-nav {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+  border-right: 1px solid #e5e7eb;
+}
+
+.doc-settings-nav-item {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+  text-decoration: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.doc-settings-nav-item:hover {
+  color: #0f766e;
+  background: #f1f5f9;
+}
+
+.doc-settings-nav-item.is-active {
+  color: #0f766e;
+  background: #ccfbf1;
+  font-weight: 600;
+}
+
+.doc-settings-body {
+  /* 网格子项默认 min-width: auto，长文本（自定义代码）会把列撑破。 */
+  min-width: 0;
+}
+
+.doc-settings-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+.doc-settings-dirty,
+.doc-settings-saved {
+  font-size: 13px;
+}
+
+.doc-settings-dirty {
+  color: #b45309;
+}
+
+.doc-settings-dirty::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.doc-settings-saved {
+  color: #6b7280;
+}
+
+/* 分组锚点跳转要留出粘性工具条的高度，否则标题会被盖住。 */
+.doc-settings-section {
+  scroll-margin-top: 88px;
+}
+
+.doc-settings-details {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.doc-settings-details > summary {
+  padding: 12px 16px;
+  cursor: pointer;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.doc-settings-details[open] > summary {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.doc-settings-details-hint {
+  margin-left: 8px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.doc-settings-details-body {
+  padding: 16px;
+}
+
+.doc-settings-help--warn {
+  margin: 4px 0 0;
+  color: #b45309;
+}
+
+@media (max-width: 980px) {
+  .doc-settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* 窄屏导航变横向条：粘在顶部，跳转后还能直接换分组。 */
+  .doc-settings-nav {
+    position: sticky;
+    top: 0;
+    z-index: 11;
+    flex-direction: row;
+    gap: 8px;
+    padding: 8px 0;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
+    overflow-x: auto;
+  }
+
+  .doc-settings-nav-item {
+    white-space: nowrap;
+  }
+
+  .doc-settings-toolbar {
+    position: static;
+  }
+
+  /* 工具条不再粘住，锚点跳转不需要额外留白。 */
+  .doc-settings-section {
+    scroll-margin-top: 56px;
+  }
+}
+
 .doc-settings-section + .doc-settings-section {
   margin-top: 24px;
   padding-top: 24px;
@@ -1335,8 +1617,18 @@ async function handleSubmit() {
   margin-top: 20px;
 }
 
-.doc-settings-list-head {
-  display: flex;
+.doc-settings-count {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+
+.doc-settings-list-head {  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1415,3 +1707,7 @@ async function handleSubmit() {
   background: #f9fafb;
 }
 </style>
+
+
+
+
