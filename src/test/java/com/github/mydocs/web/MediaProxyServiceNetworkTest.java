@@ -5,16 +5,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * <p>{@link MediaProxyService} 的真实链路测试：后两个用例不发网络请求，覆盖开关关闭、
@@ -131,6 +137,83 @@ class MediaProxyServiceNetworkTest {
                 return content;
             })
             .block(Duration.ofSeconds(120));
+    }
+
+    /**
+     * 线上 415 的回归：对象存储没存 Content-Type，回 {@code application/octet-stream}，
+     * 以前会被「不是 video/* 就拒」挡掉。现在结合扩展名放行，并把类型改成推断结果再回给浏览器。
+     */
+    @Test
+    void servesOctetStreamMediaAndRewritesTheContentType() {
+        var body = "webm-bytes".getBytes(StandardCharsets.UTF_8);
+        var service = new MediaProxyService(stubClient(HttpStatus.OK, "application/octet-stream",
+            body));
+        var settings = allowAll("bucket.abc.r2.cloudflarestorage.com");
+
+        var proxied = service.fetch(
+            "https://bucket.abc.r2.cloudflarestorage.com/SF_VULKAN_SM6_GALLERY_0.webm",
+            settings, HttpMethod.GET, new HttpHeaders()).block(Duration.ofSeconds(20));
+
+        assertThat(proxied).isNotNull();
+        assertThat(proxied.status()).isEqualTo(HttpStatus.OK);
+        assertThat(proxied.headers().getFirst(HttpHeaders.CONTENT_TYPE)).isEqualTo("video/webm");
+        assertThat(proxied.headers().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(readAll(proxied)).isEqualTo(body);
+        proxied.body().release();
+    }
+
+    /** 上游把 HTML 标成图片扩展名时仍要拒绝，不能被扩展名兜底洗白。 */
+    @Test
+    void rejectsHtmlEvenWhenTheUrlLooksLikeAnImage() {
+        var service = new MediaProxyService(stubClient(HttpStatus.OK, "text/html",
+            "<script>alert(1)</script>".getBytes(StandardCharsets.UTF_8)));
+        var settings = allowAll("media.example.com");
+
+        assertThatThrownBy(() -> service
+            .fetch("https://media.example.com/logo.png", settings, HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(20)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("415");
+    }
+
+    /** 没有 Content-Type 也没有可用扩展名时，宁可拒绝也不猜。 */
+    @Test
+    void rejectsUnknownBinaryWithoutAMediaExtension() {
+        var service = new MediaProxyService(stubClient(HttpStatus.OK, "application/octet-stream",
+            new byte[] {1, 2, 3}));
+        var settings = allowAll("media.example.com");
+
+        assertThatThrownBy(() -> service
+            .fetch("https://media.example.com/download", settings, HttpMethod.GET, new HttpHeaders())
+            .block(Duration.ofSeconds(20)))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("415");
+    }
+
+    private static DocIndexSettings allowAll(String... hosts) {
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(true);
+        settings.setMediaProxyAllowedHosts(List.of(hosts));
+        return settings;
+    }
+
+    /** 不联网的桩客户端：返回指定状态、类型与响应体。 */
+    private static WebClient stubClient(HttpStatus status, String contentType, byte[] body) {
+        return WebClient.builder()
+            .exchangeFunction(request -> {
+                var headers = new HttpHeaders();
+                if (contentType != null) {
+                    headers.set(HttpHeaders.CONTENT_TYPE, contentType);
+                }
+                var buffer = new DefaultDataBufferFactory().wrap(body);
+                var response = ClientResponse.create(status,
+                        org.springframework.web.reactive.function.client.ExchangeStrategies.withDefaults())
+                    .headers(target -> target.addAll(headers))
+                    .body(Flux.just(buffer))
+                    .build();
+                return Mono.just(response);
+            })
+            .build();
     }
 
     @Test

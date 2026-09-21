@@ -57,16 +57,6 @@ public class MediaProxyService {
         HttpHeaders.CONTENT_ENCODING, HttpHeaders.CACHE_CONTROL, HttpHeaders.EXPIRES
     );
 
-    /** 只回媒体类型，避免把上游的 HTML / JS 当同源内容执行。 */
-    private static final List<String> ALLOWED_CONTENT_TYPE_PREFIXES = List.of("video/", "audio/", "image/");
-
-    /**
-     * SVG 虽然是 {@code image/*}，但直接导航到它会在同源下执行脚本
-     * （可读 localStorage / 会话），媒体代理不接受这种类型。
-     */
-    private static final Set<String> BLOCKED_CONTENT_TYPES =
-        Set.of("image/svg+xml", "image/svg");
-
     private static final int MAX_REDIRECTS = 3;
 
     /** 连接与首个响应头的等待上限，防上游挂死不释放连接。 */
@@ -217,13 +207,17 @@ public class MediaProxyService {
                 }
 
                 // 类型与声明长度先判，避免为一个注定要拒的上游先下载整个文件。
-                String contentType = response.headers().asHttpHeaders()
+                // 上游类型不可信（对象存储常见 octet-stream），所以结合 URL 扩展名一起判断。
+                String upstreamType = response.headers().asHttpHeaders()
                     .getFirst(HttpHeaders.CONTENT_TYPE);
-                if (!isAllowedContentType(contentType)) {
+                String resolvedType = MediaTypePolicy.resolve(upstreamType, target.toString());
+                if (resolvedType == null) {
                     response.releaseBody().subscribe();
+                    log.warn("媒体代理拒绝上游内容类型：type={} source={}", upstreamType, target);
                     return Mono.error(new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
-                        "上游内容类型不允许通过媒体代理：" + contentType));
+                        "上游内容类型不允许通过媒体代理：" + upstreamType));
                 }
+                boolean attachment = MediaTypePolicy.needsAttachmentDisposition(target.toString());
                 long declaredLength = response.headers().asHttpHeaders().getContentLength();
                 if (declaredLength > maxBytes) {
                     response.releaseBody().subscribe();
@@ -234,20 +228,21 @@ public class MediaProxyService {
                 if (!hasBody(status)) {
                     response.releaseBody().subscribe();
                     return Mono.just(new UpstreamResponse(status, response.headers().asHttpHeaders(),
-                        ProxiedBody.of(new byte[0])));
+                        ProxiedBody.of(new byte[0]), resolvedType, attachment));
                 }
 
                 // HEAD 只要响应头，不必为它落一份 0 字节的临时文件。
                 if (method == HttpMethod.HEAD) {
                     response.releaseBody().subscribe();
                     return Mono.just(new UpstreamResponse(status,
-                        response.headers().asHttpHeaders(), ProxiedBody.of(new byte[0])));
+                        response.headers().asHttpHeaders(), ProxiedBody.of(new byte[0]),
+                        resolvedType, attachment));
                 }
 
                 // 响应体必须在 exchangeToMono 的回调内读完：回调返回后 WebClient 会释放它。
                 return store(response.bodyToFlux(DataBuffer.class), declaredLength, maxBytes)
                     .map(stored -> new UpstreamResponse(status, response.headers().asHttpHeaders(),
-                        stored));
+                        stored, resolvedType, attachment));
             });
     }
 
@@ -332,6 +327,13 @@ public class MediaProxyService {
                 responseHeaders.put(name, values);
             }
         });
+        // 类型用判定结果覆盖上游值：上游可能给的是 octet-stream，浏览器靠这个决定怎么播。
+        responseHeaders.setContentType(MediaType.parseMediaType(upstream.contentType()));
+        if (upstream.attachment()) {
+            // 扩展名兜底放行的图片不给内联，避免上游把可执行内容塞进图片扩展名。
+            responseHeaders.setContentDisposition(
+                org.springframework.http.ContentDisposition.attachment().build());
+        }
         if (!responseHeaders.containsHeader(HttpHeaders.ACCEPT_RANGES)) {
             responseHeaders.set(HttpHeaders.ACCEPT_RANGES, "bytes");
         }
@@ -352,31 +354,15 @@ public class MediaProxyService {
         return status == HttpStatus.OK || status == HttpStatus.PARTIAL_CONTENT;
     }
 
-    private static boolean isAllowedContentType(String contentType) {        if (!StringUtils.hasText(contentType)) {
-            // 上游没给类型时按二进制流处理，前端靠 nosniff 与自身标签解释。
-            return true;
-        }
-        try {
-            var mediaType = MediaType.parseMediaType(contentType);
-            if (BLOCKED_CONTENT_TYPES.contains(mediaType.getType().toLowerCase(Locale.ROOT) + "/"
-                + mediaType.getSubtype().toLowerCase(Locale.ROOT))) {
-                return false;
-            }
-            String type = mediaType.getType().toLowerCase(Locale.ROOT) + "/";
-            return ALLOWED_CONTENT_TYPE_PREFIXES.stream().anyMatch(type::startsWith);
-        } catch (IllegalArgumentException exception) {
-            return false;
-        }
-    }
-
     private static long maxBytes(DocIndexSettings settings) {
         Integer configured = settings.getMediaProxyMaxBytes();
         long value = configured == null ? 536870912L : configured.longValue();
         return Math.max(1048576L, Math.min(value, 2147483647L));
     }
 
-    /** 上游响应：状态码、响应头，以及已落地的响应体。 */
-    private record UpstreamResponse(HttpStatus status, HttpHeaders headers, ProxiedBody body) {
+    /** 上游响应：状态码、响应头、已落地的响应体，以及判定后的类型与下载策略。 */
+    private record UpstreamResponse(HttpStatus status, HttpHeaders headers, ProxiedBody body,
+        String contentType, boolean attachment) {
     }
 
     /**
