@@ -4,6 +4,7 @@ import {
   encodeMarkdownDestination,
   escapeMarkdownLabel,
   normalizeAttachmentUrl,
+  resolveAttachmentLabel,
 } from './markdown-attachment'
 
 describe('markdown attachment utils', () => {
@@ -60,5 +61,38 @@ describe('markdown attachment utils', () => {
         align: 'right',
       }),
     ).toBe('https://cdn.example.com/a.png#preview&md-align=right')
+  })
+
+  it('falls back to the file name when the attachment has no title', () => {
+    expect(resolveAttachmentLabel('', 'https://example.com/upload/demo.webm')).toBe('demo.webm')
+    expect(
+      resolveAttachmentLabel(undefined, '/upload/%E6%BC%94%E7%A4%BA%20%E8%A7%86%E9%A2%91.mp4'),
+    ).toBe('演示 视频.mp4')
+  })
+
+  it('strips query and fragment before reading the file name', () => {
+    expect(
+      resolveAttachmentLabel(
+        null,
+        'https://bucket.example.com/SF_VULKAN.webm?X-Amz-Signature=abc#t=10',
+      ),
+    ).toBe('SF_VULKAN.webm')
+    expect(resolveAttachmentLabel('   ', 'https://example.com/upload/')).toBe('附件')
+  })
+
+  it('keeps an explicit title and escapes it for markdown', () => {
+    expect(resolveAttachmentLabel('  演示[视频]  ', 'https://example.com/a.webm')).toBe('演示[视频]')
+  })
+
+  it('builds video attachments as image syntax so the frontend can embed a player', () => {
+    vi.stubGlobal('window', {
+      location: {
+        origin: 'https://example.com',
+      },
+    })
+
+    expect(buildMarkdownAttachment('demo.webm', '/upload/demo.webm', 'image')).toBe(
+      '![demo.webm](https://example.com/upload/demo.webm)',
+    )
   })
 })

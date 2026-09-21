@@ -4,7 +4,11 @@ import { Toast, VButton, VModal, VSpace } from '@halo-dev/components'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { buildMarkdownAttachment, type MarkdownImageOptions } from '@/utils/markdown-attachment'
+import {
+  buildMarkdownAttachment,
+  resolveAttachmentLabel,
+  type MarkdownImageOptions,
+} from '@/utils/markdown-attachment'
 import { buildMarkdownDocLink } from '@/utils/doc-link'
 
 const props = withDefaults(
@@ -31,6 +35,9 @@ const el = ref<HTMLElement>()
 let vditor: Vditor | undefined
 // 标记初始化完成前不回传，避免 after 回填初值时触发一次多余的 update。
 const ready = ref(false)
+// 附件弹窗打开时的光标位置：弹窗抢走焦点后浏览器选区会失效，必须自己留住。
+let savedCursorRange: Range | null = null
+let hasSavedCursor = false
 const attachmentSelectorVisible = ref(false)
 const imageOptionsModalVisible = ref(false)
 const docLinkModalVisible = ref(false)
@@ -72,14 +79,86 @@ const docLinkOptions = computed(() =>
 const pendingImageCount = computed(
   () => pendingAttachments.value.filter((item) => isImageAttachment(item)).length,
 )
-const pendingFileCount = computed(() => pendingAttachments.value.length - pendingImageCount.value)
+const pendingVideoCount = computed(
+  () => pendingAttachments.value.filter((item) => isVideoAttachment(item)).length,
+)
+const pendingFileCount = computed(
+  () =>
+    pendingAttachments.value.length - pendingImageCount.value - pendingVideoCount.value,
+)
 
 const editorHeight = computed(() =>
   typeof props.height === 'number' ? `${props.height}px` : props.height,
 )
 
+function editorElement(): HTMLElement | undefined {
+  return vditor?.vditor?.[vditor.vditor.currentMode]?.element as HTMLElement | undefined
+}
+
+function isRangeInEditor(range: Range | null | undefined): range is Range {
+  const editor = editorElement()
+  if (!editor || !range) {
+    return false
+  }
+  return editor === range.startContainer || editor.contains(range.startContainer)
+}
+
+/**
+ * 记住当前光标，供弹窗关闭后插回。
+ * 用户若直接点工具栏按钮，点击那一刻选区可能已经离开编辑器，
+ * 此时退回 Vditor 在 blur 时保存的 {@code vditor[currentMode].range}。
+ */
+function captureCursor() {
+  if (!ready.value) {
+    return
+  }
+
+  const selection = window.getSelection()
+  const current = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+  if (isRangeInEditor(current)) {
+    savedCursorRange = current.cloneRange()
+    hasSavedCursor = true
+    return
+  }
+
+  const fallback = vditor?.vditor?.[vditor.vditor.currentMode]?.range
+  if (isRangeInEditor(fallback)) {
+    savedCursorRange = fallback.cloneRange()
+    hasSavedCursor = true
+  }
+}
+
+/** 用保存的 Range 重建选区；节点已脱离文档时返回 false，交给 Vditor 自己的兜底。 */
+function restoreCursor(): boolean {
+  if (!hasSavedCursor || !savedCursorRange) {
+    return false
+  }
+
+  savedCursorRange = savedCursorRange.cloneRange()
+
+  const selection = window.getSelection()
+  if (!selection || !isRangeInEditor(savedCursorRange)) {
+    return false
+  }
+
+  try {
+    selection.removeAllRanges()
+    selection.addRange(savedCursorRange)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function insertMarkdown(markdown: string) {
   if (ready.value && vditor) {
+    editorElement()?.focus()
+    if (hasSavedCursor) {
+      restoreCursor()
+      // 无论选区能否重建都要释放记录，否则下一次插入会一直尝试旧位置。
+      hasSavedCursor = false
+      savedCursorRange = null
+    }
     vditor.insertValue(markdown, true)
     emit('update:modelValue', vditor.getValue())
     return
@@ -124,7 +203,7 @@ function buildToolbar(): Array<string | IMenuItem> {
       tip: '附件库',
       icon: ATTACHMENT_TOOLBAR_ICON,
       click: () => {
-        attachmentSelectorVisible.value = true
+        openAttachmentSelector()
       },
     },
     'record',
@@ -175,7 +254,7 @@ function hijackUploadToolbar() {
   button.addEventListener('click', (event) => {
     event.preventDefault()
     event.stopPropagation()
-    attachmentSelectorVisible.value = true
+    openAttachmentSelector()
   })
 }
 
@@ -225,6 +304,11 @@ onBeforeUnmount(() => {
   vditor = undefined
   ready.value = false
 })
+
+function openAttachmentSelector() {
+  captureCursor()
+  attachmentSelectorVisible.value = true
+}
 
 function closeAttachmentSelector() {
   attachmentSelectorVisible.value = false
@@ -284,11 +368,6 @@ function handleInsertDocLink() {
   closeDocLinkModal()
 }
 
-function fallbackAttachmentLabel(url: string): string {
-  const normalized = url.split('?')[0]
-  return decodeURIComponent(normalized.split('/').pop() || '附件')
-}
-
 function toOptionalNumber(value: unknown): number | undefined {
   if (value === '' || value === null || value === undefined) {
     return undefined
@@ -303,6 +382,15 @@ function isImageAttachment(attachment: AttachmentLike): boolean {
   return !!simple?.url && !!simple.mediaType?.startsWith('image/')
 }
 
+/**
+ * 视频附件用图片语法插入 `![文件名](路径)`：前台渲染器会把指向视频文件的图片语法
+ * 换成内嵌播放器，写成普通链接则只剩一个下载链接。
+ */
+function isVideoAttachment(attachment: AttachmentLike): boolean {
+  const simple = utils.attachment.convertToSimple(attachment)
+  return !!simple?.url && !!simple.mediaType?.startsWith('video/')
+}
+
 function toMarkdown(
   attachment: AttachmentLike,
   imageOptions?: MarkdownImageOptions,
@@ -312,8 +400,11 @@ function toMarkdown(
     return undefined
   }
 
-  const label = simple.alt?.trim() || fallbackAttachmentLabel(simple.url)
+  const label = resolveAttachmentLabel(simple.alt, simple.url)
   if (isImageAttachment(attachment)) {
+    return buildMarkdownAttachment(label, simple.url, 'image', imageOptions)
+  }
+  if (isVideoAttachment(attachment)) {
     return buildMarkdownAttachment(label, simple.url, 'image', imageOptions)
   }
 
@@ -380,6 +471,11 @@ function handleInsertPendingAttachments() {
   insertPendingAttachments(imageOptions)
 }
 
+/** 「不加参数」：不经过校验，直接按空参数插入并放走这块附件选择。 */
+function handleInsertWithoutOptions() {
+  insertPendingAttachments()
+}
+
 function handleAttachmentSelect(attachments: AttachmentLike[]) {
   if (!attachments.length) {
     closeAttachmentSelector()
@@ -387,7 +483,8 @@ function handleAttachmentSelect(attachments: AttachmentLike[]) {
   }
 
   closeAttachmentSelector()
-  if (attachments.some((item) => isImageAttachment(item))) {
+  // 视频也用图片语法插入（前台据此生成播放器），所以同样值得走一次尺寸/对齐设置。
+  if (attachments.some((item) => isImageAttachment(item) || isVideoAttachment(item))) {
     pendingAttachments.value = attachments
     resetImageOptionForm()
     imageOptionsModalVisible.value = true
@@ -418,14 +515,21 @@ function handleAttachmentSelect(attachments: AttachmentLike[]) {
   />
   <VModal
     v-if="imageOptionsModalVisible"
-    title="插入图片参数"
+    title="插入媒体参数"
     :width="560"
     @close="closeImageOptionsModal"
   >
     <div class="image-option-summary">
-      本次已选择 {{ pendingImageCount }} 张图片
+      <span v-if="pendingImageCount > 0">本次已选择 {{ pendingImageCount }} 张图片</span>
+      <span v-if="pendingImageCount > 0 && pendingVideoCount > 0">，</span>
+      <span v-if="pendingVideoCount > 0"
+        >{{ pendingVideoCount }} 个视频将按内嵌播放器插入</span
+      >
+      <span v-if="(pendingImageCount > 0 || pendingVideoCount > 0) && pendingFileCount > 0"
+        >，</span
+      >
       <span v-if="pendingFileCount > 0"
-        >，另有 {{ pendingFileCount }} 个文件链接将保持普通插入</span
+        >另有 {{ pendingFileCount }} 个文件链接将保持普通插入</span
       >
       。
     </div>
@@ -457,7 +561,7 @@ function handleAttachmentSelect(attachments: AttachmentLike[]) {
     <template #footer>
       <VSpace>
         <VButton type="secondary" @click="handleInsertPendingAttachments">插入</VButton>
-        <VButton @click="insertPendingAttachments()">不加参数</VButton>
+        <VButton @click="handleInsertWithoutOptions">不加参数</VButton>
         <VButton @click="closeImageOptionsModal">取消</VButton>
       </VSpace>
     </template>

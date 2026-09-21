@@ -12,6 +12,11 @@
       ];
       var managedSchemeAttribute = 'data-mdocs-color-scheme';
       var effectiveSchemeAttribute = 'data-mdocs-effective-scheme';
+      // 访客手动选过主题时写上，供样式表区分「手动选择」与「跟随站点」。
+      var manualSchemeAttribute = 'data-mdocs-manual-scheme';
+      // 访客自己点过切换按钮后写在这里，优先级高于站点主题与系统偏好。
+      var overrideStorageKey = 'mdocs:color-scheme';
+      var switcherId = 'mdocs-theme-switcher';
       var systemDark = window.matchMedia('(prefers-color-scheme: dark)');
       var storageKeys = [
         'StackColorScheme',
@@ -38,6 +43,39 @@
           return 'auto';
         }
         return null;
+      }
+
+      function readOverride() {
+        try {
+          return normalizeScheme(localStorage.getItem(overrideStorageKey));
+        } catch (error) {
+          // 隐私模式下 localStorage 可能不可用，此时不启用强制覆盖。
+          return null;
+        }
+      }
+
+      function writeOverride(scheme) {
+        try {
+          if (scheme) {
+            localStorage.setItem(overrideStorageKey, scheme);
+          } else {
+            localStorage.removeItem(overrideStorageKey);
+          }
+        } catch (error) {
+          // 存不下就只在本次会话生效。
+        }
+      }
+
+      /** 让样式表知道当前是不是访客手动选的：手动选择要压过站点主题写在根元素上的标记。 */
+      function applyManualSchemeMarker() {
+        var override = readOverride();
+        if (override === 'dark' || override === 'light') {
+          if (root.getAttribute(manualSchemeAttribute) !== override) {
+            root.setAttribute(manualSchemeAttribute, override);
+          }
+        } else if (root.hasAttribute(manualSchemeAttribute)) {
+          root.removeAttribute(manualSchemeAttribute);
+        }
       }
 
       function detectFromElement(element) {
@@ -99,13 +137,15 @@
       }
 
       function detectScheme() {
-        return detectFromElement(document.body)
+        return readOverride()
+          || detectFromElement(document.body)
           || detectFromElement(root)
           || detectFromStorage()
           || 'auto';
       }
 
       function applyScheme(nextScheme) {
+        applyManualSchemeMarker();
         var currentManagedScheme = root.getAttribute(managedSchemeAttribute);
         if (!nextScheme) {
           if (currentManagedScheme && root.getAttribute('data-color-scheme') === currentManagedScheme) {
@@ -134,11 +174,68 @@
         applyScheme(detectScheme());
       }
 
+      // 切换按钮只做一件事：把「自动」换成访客点出来的明确选择，之后主题观察器与系统偏好都不再改动它。
+      function toggleScheme() {
+        var effective = root.getAttribute(effectiveSchemeAttribute) === 'dark' ? 'dark' : 'light';
+        var next = effective === 'dark' ? 'light' : 'dark';
+        writeOverride(next);
+        applyScheme(next);
+        renderSwitcher();
+      }
+
+      var SWITCHER_BUTTON_ID = 'mdocs-theme-switcher-button';
+
+      function renderSwitcher() {
+        var button = document.getElementById(SWITCHER_BUTTON_ID);
+        if (!button) {
+          return;
+        }
+        var isDark = root.getAttribute(effectiveSchemeAttribute) === 'dark';
+        var label = isDark ? '切换到浅色主题' : '切换到深色主题';
+        button.setAttribute('aria-label', label);
+        button.setAttribute('title', label);
+        var icon = button.querySelector('.mdocs-theme-switcher-icon');
+        if (icon) {
+          icon.innerHTML = isDark
+            ? '<path d="M12 3v2m0 14v2M5.6 5.6l1.4 1.4m10 10 1.4 1.4M3 12h2m14 0h2M5.6 18.4l1.4-1.4m10-10 1.4-1.4"/><circle cx="12" cy="12" r="4"/>'
+            : '<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z"/>';
+        }
+      }
+
+      function ensureSwitcher() {
+        if (document.getElementById(SWITCHER_BUTTON_ID) || !document.body) {
+          return;
+        }
+
+        var switcher = document.createElement('div');
+        switcher.id = switcherId;
+        switcher.className = 'mdocs-theme-switcher';
+        switcher.setAttribute('data-mdocs-theme-switcher', 'true');
+
+        var button = document.createElement('button');
+        button.id = SWITCHER_BUTTON_ID;
+        button.type = 'button';
+        button.className = 'mdocs-theme-switcher-button';
+        button.innerHTML = '<svg class="mdocs-theme-switcher-icon" viewBox="0 0 24 24" fill="none" '
+          + 'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+          + 'stroke-linejoin="round" aria-hidden="true"></svg>';
+        button.addEventListener('click', toggleScheme);
+
+        switcher.appendChild(button);
+        document.body.appendChild(switcher);
+        renderSwitcher();
+      }
+
       syncScheme();
 
       var startObserver = function () {
         syncScheme();
-        var observer = new MutationObserver(syncScheme);
+        // 脚本在 head 里执行，此时 body 还不存在，按钮必须等 DOM 就绪后再注入。
+        ensureSwitcher();
+        var observer = new MutationObserver(function () {
+          syncScheme();
+          renderSwitcher();
+        });
         observer.observe(root, {
           attributes: true,
           attributeFilter: observedAttributes,
@@ -162,7 +259,7 @@
         systemDark.addListener(syncScheme);
       }
       window.addEventListener('storage', function (event) {
-        if (!event.key || storageKeys.indexOf(event.key) >= 0) {
+        if (!event.key || storageKeys.indexOf(event.key) >= 0 || event.key === overrideStorageKey) {
           syncScheme();
         }
       });
@@ -225,6 +322,88 @@
     html.color-scheme-auto,
     html.theme-auto {
       color-scheme: light dark;
+    }
+
+    /*
+      显式主题块。深色块会命中站点主题写在根元素上的 dark 标记（class="dark"、
+      data-scheme="dark"），且声明了整套 --mdocs-* 变量；只看颜色方案的话，
+      访客手动切浅色会被这些标记压回深色。这里按 effective-scheme 再声明一遍。
+      两个选择器都带 :not()，权重严格高于深色块（(0,2,1) / (0,7,1) 对 (0,1,1)），
+      块本身也排在深色块之后，两条保险都要留着：若把它「简化」成裸的
+      html[data-mdocs-effective-scheme="light"]，权重会掉回 (0,1,1)，只能靠顺序。
+      :not([data-mdocs-manual-scheme]) 保证只在「肉眼看到的就是这个主题」时生效，
+      避免给手动切换加了别的站点信号后两边互相矛盾。
+    */
+    html[data-mdocs-effective-scheme="light"]:not([data-mdocs-manual-scheme="dark"]),
+    html:not([data-mdocs-manual-scheme]):not([data-color-scheme="dark"]):not([data-scheme="dark"]):not(.dark):not(.color-scheme-dark):not(.theme-dark):not(.dark-mode) {
+      color-scheme: light;
+      --mdocs-bg: #f8fafc;
+      --mdocs-surface: #ffffff;
+      --mdocs-surface-soft: #f1f5f9;
+      --mdocs-hero-bg: linear-gradient(135deg, #f8fafc, #ecfeff);
+      --mdocs-text: #1f2937;
+      --mdocs-text-strong: #0f172a;
+      --mdocs-muted: #64748b;
+      --mdocs-border: #e2e8f0;
+      --mdocs-accent: #0f766e;
+      --mdocs-accent-soft: #ecfdf5;
+      --mdocs-code-bg: #0f172a;
+      --mdocs-code-text: #e2e8f0;
+      --mdocs-inline-code-bg: #f1f5f9;
+      --mdocs-shadow: 0 12px 30px rgba(15, 118, 110, 0.08);
+    }
+
+    .mdocs-theme-switcher {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mdocs-theme-switcher-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 1px solid var(--mdocs-border);
+      border-radius: 999px;
+      background: var(--mdocs-surface);
+      color: var(--mdocs-text-strong);
+      box-shadow: var(--mdocs-shadow);
+      cursor: pointer;
+      transition: color .2s ease, border-color .2s ease, background-color .2s ease;
+    }
+
+    .mdocs-theme-switcher-button:hover {
+      color: var(--mdocs-accent);
+      border-color: var(--mdocs-accent);
+    }
+
+    .mdocs-theme-switcher-button:focus-visible {
+      outline: 2px solid var(--mdocs-accent);
+      outline-offset: 2px;
+    }
+
+    .mdocs-theme-switcher-icon {
+      width: 19px;
+      height: 19px;
+    }
+
+    @media (max-width: 760px) {
+      .mdocs-theme-switcher {
+        top: 10px;
+        right: 10px;
+      }
+
+      .mdocs-theme-switcher-button {
+        width: 34px;
+        height: 34px;
+      }
     }
   </style>
 </th:block>

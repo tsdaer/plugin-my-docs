@@ -118,6 +118,29 @@ spec:
           label: 视频内嵌播放
           help: 把图片语法引用的 mp4、webm、m3u8 等视频文件渲染为内嵌播放器（DPlayer）。
           value: true
+        - $formkit: switch
+          name: mediaProxyEnabled
+          label: 媒体同域代理
+          help: 把下方允许清单里主机的图片、音视频地址改写成站点自身的 /media-proxy 地址，由服务端代取。适用于对象存储桶不对公网开放、附件 permalink 只是裸对象地址的情况；关闭后前台直连原始地址。
+          value: false
+        - $formkit: textarea
+          name: mediaProxyAllowedHosts
+          label: 媒体代理允许主机
+          help: "每行一个主机名，例如 media.example.com 或 *.r2.cloudflarestorage.com。只有这里列出的主机才会被代理，留空即完全关闭代理。"
+          value: ""
+          rows: 4
+        - $formkit: textarea
+          name: mediaProxyRequestHeaders
+          label: 媒体代理附加请求头
+          help: "可选，每行一条，格式为「主机: 头名: 头值」，例如 media.example.com: Authorization: Bearer xxx。主机不要带端口（写 media.example.com:8443 会被当成头名而整条失效），头值里可以带冒号。仅对上面允许清单内的主机生效，用于私有对象存储。注意：代理端点对访客开放，凭证只按主机匹配、没有路径限制，配了凭证就等于把该主机对公网开放读取；请只填只读、可随时吊销、且确实需要公开的媒体凭证。头值只保存在服务端设置里，不会输出到页面。"
+          value: ""
+          rows: 3
+        - $formkit: number
+          name: mediaProxyMaxBytes
+          label: 媒体代理大小上限（字节）
+          help: 单个媒体文件超过该值时中断，默认 536870912（512 MiB）。
+          value: 536870912
+          validation: required|min:1048576
         - $formkit: textarea
           name: customHeadHtml
           label: 全局自定义 head 代码

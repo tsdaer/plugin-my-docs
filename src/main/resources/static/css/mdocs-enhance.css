@@ -214,6 +214,19 @@ body.mdocs-lightbox-open {
   overflow: hidden;
 }
 
+/* 播放失败时 DPlayer 只留一片黑，这里补一句可读的说明。 */
+.mdocs-content .mdocs-media-error {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--mdocs-border);
+  border-left: 3px solid #dc2626;
+  border-radius: 8px;
+  background: var(--mdocs-surface);
+  color: var(--mdocs-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* ---------- 图表容器 ---------- */
 .mdocs-content .mdocs-chart {
   margin: 1em 0;

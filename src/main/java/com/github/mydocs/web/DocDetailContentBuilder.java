@@ -7,13 +7,17 @@ import com.github.mydocs.service.MarkdownRenderer;
 import java.net.URI;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
 import lombok.Value;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
+import run.halo.app.infra.ExternalUrlSupplier;
 
 /**
  * 为文档详情页补充展示层数据：先经内容后处理扩展链（{@link DocContentHandlerChain}）改写正文，
@@ -26,12 +30,18 @@ public class DocDetailContentBuilder {
     private final DocContentHandlerChain contentHandlerChain;
     private final MarkdownRenderer markdownRenderer;
     private final DocIndexSettingsService settingsService;
+    private final MediaProxyService mediaProxyService;
+    private final ObjectProvider<ExternalUrlSupplier> externalUrlSupplier;
 
     public DocDetailContentBuilder(DocContentHandlerChain contentHandlerChain,
-        MarkdownRenderer markdownRenderer, DocIndexSettingsService settingsService) {
+        MarkdownRenderer markdownRenderer, DocIndexSettingsService settingsService,
+        MediaProxyService mediaProxyService,
+        ObjectProvider<ExternalUrlSupplier> externalUrlSupplier) {
         this.contentHandlerChain = contentHandlerChain;
         this.markdownRenderer = markdownRenderer;
         this.settingsService = settingsService;
+        this.mediaProxyService = mediaProxyService;
+        this.externalUrlSupplier = externalUrlSupplier;
     }
 
     public Mono<DetailContent> build(DocLibrary library, Doc doc) {
@@ -56,10 +66,46 @@ public class DocDetailContentBuilder {
                 .map(handledContent -> {
                     Document document = Jsoup.parseBodyFragment(handledContent);
                     rewriteSameLibraryLinks(document.body(), librarySlug);
+                    rewriteProxiedMediaSources(document.body(), settings);
                     return new DetailContent(document.body().html(),
                         extractOutline(document.body()), settings);
                 });
         });
+    }
+
+    /**
+     * 把命中媒体代理允许清单的图片 / 音视频地址换成站点自身的代理路径。
+     * 允许清单为空或开关关闭时 {@link MediaProxyRules#rewrite} 原样返回，DOM 不受影响。
+     */
+    private void rewriteProxiedMediaSources(Element root, DocIndexSettings settings) {
+        if (!Boolean.TRUE.equals(settings.getMediaProxyEnabled())) {
+            return;
+        }
+        var allowedHosts = settings.getMediaProxyAllowedHosts();
+        if (allowedHosts == null || allowedHosts.isEmpty()) {
+            return;
+        }
+
+        String siteHost = siteHost();
+        for (String selector : List.of("img[src]", "video[src]", "audio[src]", "source[src]")) {
+            root.select(selector).forEach(element -> {
+                String src = element.attr("src");
+                String rewritten = MediaProxyRules.rewrite(src, allowedHosts, siteHost);
+                if (!Objects.equals(rewritten, src)) {
+                    element.attr("src", rewritten);
+                    element.attr("data-mdocs-proxied", "true");
+                }
+            });
+        }
+    }
+
+    /** 站点外部地址的主机名，用于跳过本来就同域的地址；没配 external-url 时跳过该优化。 */
+    private String siteHost() {
+        return Optional.ofNullable(externalUrlSupplier.getIfAvailable())
+            .map(ExternalUrlSupplier::getRaw)
+            .map(url -> url.getPort() > 0
+                ? url.getHost() + ":" + url.getPort() : url.getHost())
+            .orElse(null);
     }
 
     private void rewriteSameLibraryLinks(Element root, String librarySlug) {

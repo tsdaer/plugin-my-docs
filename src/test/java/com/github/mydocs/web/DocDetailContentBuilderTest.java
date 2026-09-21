@@ -115,7 +115,8 @@ class DocDetailContentBuilderTest {
         };
         var chainBuilder = new DocDetailContentBuilder(
             new DocContentHandlerChain(getterWith(handler)), new MarkdownRenderer(),
-            settingsService(new DocIndexSettings()));
+            settingsService(new DocIndexSettings()), new MediaProxyService(),
+            providerWithExternalUrl(null));
 
         var doc = new Doc();
         var spec = new Doc.Spec();
@@ -152,10 +153,139 @@ class DocDetailContentBuilderTest {
             .doesNotContain("stale");
     }
 
+    @Test
+    void rewritesAllowlistedMediaSourcesThroughTheSameOriginProxy() {
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(true);
+        settings.setMediaProxyAllowedHosts(List.of("*.r2.cloudflarestorage.com", "media.example.com"));
+        var proxyBuilder = builderWith(emptyGetter(), settings);
+
+        var doc = new Doc();
+        var spec = new Doc.Spec();
+        spec.setContent("""
+            <p><img src="https://bucket.abc.r2.cloudflarestorage.com/a.webm" alt="demo"></p>
+            <p><img src="https://media.example.com/b.png" alt="pic"></p>
+            <p><img src="https://other.example.net/c.png" alt="external"></p>
+            <p><img src="/upload/local.png" alt="local"></p>
+            <video src="https://media.example.com/d.mp4"></video>
+            <audio><source src="https://media.example.com/e.mp3"></audio>
+            """);
+        doc.setSpec(spec);
+
+        var content = proxyBuilder.build(library("guide"), doc).block();
+
+        assertThat(content.getHtml())
+            .contains("src=\"/apis/api.my-docs.tsdaer.run/v1alpha1/media-proxy?src=")
+            .contains("data-mdocs-proxied=\"true\"")
+            .contains("src=\"https://other.example.net/c.png\"")
+            .contains("src=\"/upload/local.png\"");
+        assertThat(content.getHtml().split("data-mdocs-proxied", -1).length - 1).isEqualTo(4);
+    }
+
+    @Test
+    void leavesMediaSourcesAloneWhenTheProxyIsOffOrNotConfigured() {
+        for (var settings : List.of(offProxy(), enabledWithoutHosts())) {
+            var doc = new Doc();
+            var spec = new Doc.Spec();
+            spec.setContent("<p><img src=\"https://media.example.com/b.png\" alt=\"pic\"></p>");
+            doc.setSpec(spec);
+
+            var content = builderWith(emptyGetter(), settings).build(library("guide"), doc).block();
+
+            assertThat(content.getHtml())
+                .contains("src=\"https://media.example.com/b.png\"")
+                .doesNotContain("media-proxy");
+        }
+    }
+
+    @Test
+    void skipsProxyingSourcesAlreadyOnTheSiteHost() {
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(true);
+        settings.setMediaProxyAllowedHosts(List.of("site.example.com"));
+        var proxyBuilder = new DocDetailContentBuilder(new DocContentHandlerChain(emptyGetter()),
+            new MarkdownRenderer(), settingsService(settings), new MediaProxyService(),
+            providerWithExternalUrl("https://site.example.com"));
+
+        var doc = new Doc();
+        var spec = new Doc.Spec();
+        spec.setContent("<p><img src=\"https://site.example.com/a.png\" alt=\"pic\"></p>");
+        doc.setSpec(spec);
+
+        var content = proxyBuilder.build(library("guide"), doc).block();
+
+        assertThat(content.getHtml())
+            .contains("src=\"https://site.example.com/a.png\"")
+            .doesNotContain("media-proxy");
+    }
+
+    private static DocIndexSettings offProxy() {
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(false);
+        settings.setMediaProxyAllowedHosts(List.of("media.example.com"));
+        return settings;
+    }
+
+    private static DocIndexSettings enabledWithoutHosts() {
+        var settings = new DocIndexSettings();
+        settings.setMediaProxyEnabled(true);
+        settings.setMediaProxyAllowedHosts(List.of());
+        return settings;
+    }
+
     private static DocDetailContentBuilder builderWith(ExtensionGetter getter,
         DocIndexSettings settings) {
         return new DocDetailContentBuilder(new DocContentHandlerChain(getter),
-            new MarkdownRenderer(), settingsService(settings));
+            new MarkdownRenderer(), settingsService(settings), new MediaProxyService(),
+            providerWithExternalUrl(null));
+    }
+
+    private static org.springframework.beans.factory.ObjectProvider<run.halo.app.infra.ExternalUrlSupplier>
+        providerWithExternalUrl(String externalUrl) {
+        return new org.springframework.beans.factory.ObjectProvider<>() {
+            @Override
+            public run.halo.app.infra.ExternalUrlSupplier getObject() {
+                return supplier();
+            }
+
+            @Override
+            public run.halo.app.infra.ExternalUrlSupplier getObject(Object... args) {
+                return supplier();
+            }
+
+            @Override
+            public run.halo.app.infra.ExternalUrlSupplier getIfAvailable() {
+                return externalUrl == null ? null : supplier();
+            }
+
+            @Override
+            public run.halo.app.infra.ExternalUrlSupplier getIfUnique() {
+                return getIfAvailable();
+            }
+
+            private run.halo.app.infra.ExternalUrlSupplier supplier() {
+                return new run.halo.app.infra.ExternalUrlSupplier() {
+                    @Override
+                    public java.net.URI get() {
+                        return java.net.URI.create(externalUrl);
+                    }
+
+                    @Override
+                    public java.net.URL getURL(org.springframework.http.HttpRequest request) {
+                        return null;
+                    }
+
+                    @Override
+                    public java.net.URL getRaw() {
+                        try {
+                            return java.net.URI.create(externalUrl).toURL();
+                        } catch (java.net.MalformedURLException exception) {
+                            return null;
+                        }
+                    }
+                };
+            }
+        };
     }
 
     private static DocIndexSettingsService settingsService(DocIndexSettings settings) {

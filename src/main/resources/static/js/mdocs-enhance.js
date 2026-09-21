@@ -23,6 +23,9 @@
 
       var IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico'];
       var HLS_SUFFIX = '.m3u8';
+      // 与后端 MediaProxyRules.PROXY_PATH 一致：正文里的媒体可能已被改写成同域代理地址，
+      // 这种情况下扩展名要从 src 参数里的原始地址取。
+      var MEDIA_PROXY_PREFIX = '/apis/api.my-docs.tsdaer.run/v1alpha1/media-proxy?';
       var DPLAYER_SCRIPT_BASE = '/plugins/my-docs/assets/static/dplayer/';
 
       var ICONS = {
@@ -480,6 +483,7 @@
           container.setAttribute('style', style);
         }
         video.replaceWith(container);
+        registerPlaybackFailureHint(container);
         try {
           new DPlayer({
             container: container,
@@ -500,8 +504,38 @@
           }
         } catch (error) {
           console.warn('[my-docs] DPlayer 初始化失败，回退原生播放器。', error);
-          container.replaceWith(video);
+          var fallback = root.ownerDocument.createElement('div');
+          fallback.className = 'mdocs-media';
+          var style = video.getAttribute('style');
+          if (style) {
+            fallback.setAttribute('style', style);
+          }
+          container.replaceWith(fallback);
+          fallback.appendChild(video);
+          registerPlaybackFailureHint(fallback);
         }
+      }
+
+      /**
+       * 媒体加载失败时补一句人话：地址需要鉴权、已过期或跨域被拒时，
+       * 播放器只会停在一片黑，用户看不出发生了什么。
+       * error 事件不冒泡，用捕获阶段监听容器内的 video。
+       */
+      function registerPlaybackFailureHint(host) {
+        if (!host) {
+          return;
+        }
+        host.addEventListener('error', function (event) {
+          var media = event.target;
+          if (!media || media.tagName !== 'VIDEO' || host.getAttribute('data-mdocs-playback-error')) {
+            return;
+          }
+          host.setAttribute('data-mdocs-playback-error', 'true');
+          var hint = host.ownerDocument.createElement('p');
+          hint.className = 'mdocs-media-error';
+          hint.textContent = '视频加载失败：地址可能不可访问、需要鉴权或已过期。';
+          host.appendChild(hint);
+        }, true);
       }
 
       function videoSrc(video) {
@@ -718,11 +752,36 @@
         return IMAGE_EXTENSIONS.indexOf(path.slice(dotIndex + 1).toLowerCase()) >= 0;
       }
 
+      /** 代理地址里被代取的原始地址；不是代理地址时原样返回。 */
+      function mediaSourceOf(url) {
+        if (!url || url.indexOf(MEDIA_PROXY_PREFIX) !== 0) {
+          return url || '';
+        }
+
+        var query = url.slice(MEDIA_PROXY_PREFIX.length).split('#')[0];
+        var pairs = query.split('&');
+        for (var index = 0; index < pairs.length; index += 1) {
+          var equals = pairs[index].indexOf('=');
+          if (equals <= 0) {
+            continue;
+          }
+          if (pairs[index].slice(0, equals) === 'src') {
+            try {
+              return decodeURIComponent(pairs[index].slice(equals + 1));
+            } catch (error) {
+              return pairs[index].slice(equals + 1);
+            }
+          }
+        }
+        return '';
+      }
+
       function isHlsSource(url) {
-        if (!url) {
+        var effective = mediaSourceOf(url);
+        if (!effective) {
           return false;
         }
-        return url.split('#')[0].split('?')[0].toLowerCase().slice(-HLS_SUFFIX.length)
+        return effective.split('#')[0].split('?')[0].toLowerCase().slice(-HLS_SUFFIX.length)
           === HLS_SUFFIX;
       }
 

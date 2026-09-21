@@ -14,6 +14,31 @@ export function escapeMarkdownLabel(label: string): string {
   return label.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
 }
 
+/**
+ * 附件缺少标题时用 URL 末段兜底。附件 URL 常带 `?X-Amz-Signature=…` 之类的查询串，
+ * 必须先剥掉再取文件名，否则标签会拖着一长串签名参数。
+ */
+export function resolveAttachmentLabel(
+  label: string | null | undefined,
+  url: string,
+  fallback = '附件',
+): string {
+  const trimmed = (label ?? '').trim()
+  if (trimmed) {
+    return trimmed
+  }
+
+  const path = (url || '').split('#')[0].split('?')[0]
+  const lastSegment = path.split('/').pop() || ''
+  let decoded = lastSegment
+  try {
+    decoded = decodeURIComponent(lastSegment)
+  } catch {
+    // 非法百分号编码，退回原文。
+  }
+  return decoded.trim() || fallback
+}
+
 export interface MarkdownImageOptions {
   width?: number | null
   align?: '' | 'left' | 'center' | 'right' | null

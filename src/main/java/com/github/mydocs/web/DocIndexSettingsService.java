@@ -13,7 +13,8 @@ import run.halo.app.plugin.ReactiveSettingFetcher;
 @Component
 public class DocIndexSettingsService {
 
-    static final String BASIC_GROUP = "basic";
+    /** 设置分组名，同时被端点测试复用。 */
+    public static final String BASIC_GROUP = "basic";
     private static final Pattern CSS_CLASS_PATTERN =
         Pattern.compile("^[A-Za-z_][A-Za-z0-9_-]*$");
     private static final Pattern CODE_THEME_PATTERN = Pattern.compile("^[a-z0-9-]{1,100}$");
@@ -68,9 +69,76 @@ public class DocIndexSettingsService {
             Boolean.TRUE.equals(settings.getRenderParagraphBeginningSpace()));
         normalized.setRenderCodeBlockPreview(!Boolean.FALSE.equals(settings.getRenderCodeBlockPreview()));
         normalized.setRenderMathBlockPreview(!Boolean.FALSE.equals(settings.getRenderMathBlockPreview()));
+        normalized.setMediaProxyEnabled(Boolean.TRUE.equals(settings.getMediaProxyEnabled()));
+        normalized.setMediaProxyAllowedHosts(
+            normalizeMediaProxyAllowedHosts(settings.getMediaProxyAllowedHosts()));
+        normalized.setMediaProxyRequestHeaders(
+            normalizeMediaProxyRequestHeaders(settings.getMediaProxyRequestHeaders(),
+                normalized.getMediaProxyAllowedHosts()));
+        normalized.setMediaProxyMaxBytes(
+            positive(settings.getMediaProxyMaxBytes(), 536870912, 2147483647));
         normalized.setCustomHeadHtml(nullToEmpty(settings.getCustomHeadHtml()));
         normalized.setCustomBodyHtml(nullToEmpty(settings.getCustomBodyHtml()));
         return normalized;
+    }
+
+    /**
+     * 允许代理的主机：每行一条，支持 {@code *.example.com} 这类前缀通配，
+     * 允许附带 {@code :端口}。写坏的行直接丢弃——配置项宁可少代理，也不能放宽成任意主机。
+     */
+    static List<String> normalizeMediaProxyAllowedHosts(List<String> source) {
+        return rawMediaProxyLines(source).stream()
+            .filter(line -> !line.startsWith("#"))
+            .map(line -> line.toLowerCase(java.util.Locale.ROOT))
+            .filter(MediaProxyRules::isValidHostPattern)
+            .distinct()
+            .limit(50)
+            .toList();
+    }
+
+    /**
+     * 请求头规则：每行 {@code 主机: 头名: 头值}，主机部分必须能被某条允许主机规则匹配，
+     * 否则丢弃。头名限制为 token 字符，并拒掉带换行的头值，避免请求头注入。
+     * 头值区分大小写（Bearer 令牌之类），只把主机部分转小写。
+     */
+    static List<String> normalizeMediaProxyRequestHeaders(List<String> source,
+        List<String> allowedHosts) {
+        if (allowedHosts == null || allowedHosts.isEmpty()) {
+            return List.of();
+        }
+        return rawMediaProxyLines(source).stream()
+            .filter(line -> !line.startsWith("#"))
+            .map(MediaProxyRules::parseHeaderRule)
+            .filter(java.util.Objects::nonNull)
+            .filter(rule -> MediaProxyRules.HEADER_NAME_PATTERN.matcher(rule[1]).matches())
+            .filter(rule -> !rule[2].isEmpty() && rule[2].length() <= 2048)
+            .filter(rule -> !rule[2].contains("\r") && !rule[2].contains("\n"))
+            .filter(rule -> allowedHosts.stream()
+                .anyMatch(allowed -> MediaProxyRules.overlaps(allowed, rule[0])))
+            .map(rule -> rule[0] + ": " + rule[1] + ": " + rule[2])
+            .distinct()
+            .limit(20)
+            .toList();
+    }
+
+    /** 多行文本设置可能是「一行一个元素」，也可能是「一个元素里带换行」，两种都拆平，保留原始大小写。 */
+    private static List<String> rawMediaProxyLines(List<String> source) {
+        if (source == null || source.isEmpty()) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        for (String raw : source) {
+            if (raw == null) {
+                continue;
+            }
+            for (String line : raw.split("\\R")) {
+                String trimmed = StringUtils.trimWhitespace(line);
+                if (StringUtils.hasText(trimmed)) {
+                    lines.add(trimmed);
+                }
+            }
+        }
+        return List.copyOf(lines);
     }
 
     private static List<DocIndexSettings.LibraryPageLayout> normalizePageLayouts(

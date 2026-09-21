@@ -59,6 +59,29 @@ public class DocIndexSettings {
 
     private Boolean renderMediaEmbed = true;
 
+    /**
+     * <p>同域媒体反代：把指定主机上的图片 / 音视频源改写成站点自身的
+     * {@code /apis/api.my-docs.tsdaer.run/v1alpha1/media-proxy} 地址，由服务端代取。</p>
+     * <p>默认关闭。只有列在 {@link #mediaProxyAllowedHosts} 里的主机才会被代理，
+     * 避免文档正文把站点变成任意地址的代理。</p>
+     */
+    private Boolean mediaProxyEnabled = false;
+
+    /**
+     * <p>允许代理的主机，每行一条，支持 {@code *.example.com} 这类前缀通配与可选端口。</p>
+     * <p>设置页的多行输入框回传的是字符串，Halo 绑定成 List 后每行一个元素；
+     * 这里保留 List 形态，由 {@code DocIndexSettingsService} 统一拆行。</p>
+     */
+    private List<String> mediaProxyAllowedHosts = new ArrayList<>();
+
+    /**
+     * 每条形如 {@code media.example.com: Authorization: Bearer xxx}，
+     * 命中该主机（含通配）的代理请求在服务端补上这个头，用于私有对象存储。
+     */
+    private List<String> mediaProxyRequestHeaders = new ArrayList<>();
+
+    private Integer mediaProxyMaxBytes = 536870912;
+
     // 仅用于读取旧版 ConfigMap，规范化后不再写入模板模型。
     private String renderContentTheme;
 
