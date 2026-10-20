@@ -49,6 +49,8 @@ public class MyDocsPlugin extends BasePlugin {
                 .indexFunc(doc -> doc.getSpec().getSlug()));
             indexSpecs.add(IndexSpecs.<Doc, String>single("spec.libraryName", String.class)
                 .indexFunc(doc -> doc.getSpec().getLibraryName()));
+            indexSpecs.add(IndexSpecs.<Doc, String>single("spec.sourcePostName", String.class)
+                .indexFunc(doc -> doc.getSpec().getSourcePostName()));
             indexSpecs.add(IndexSpecs.<Doc, String>single("spec.parent", String.class)
                 .indexFunc(doc -> doc.getSpec().getParent()));
             indexSpecs.add(IndexSpecs.<Doc, Integer>single("spec.priority", Integer.class)

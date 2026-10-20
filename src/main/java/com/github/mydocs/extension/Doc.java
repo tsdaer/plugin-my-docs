@@ -47,6 +47,9 @@ public class Doc extends AbstractExtension {
             description = "所属文档库的 metadata.name")
         private String libraryName;
 
+        @Schema(description = "来源 Halo 文章的 metadata.name，用于同库重复导入更新")
+        private String sourcePostName;
+
         @Schema(description = "父文档的 metadata.name，为空表示顶层节点")
         private String parent;
 

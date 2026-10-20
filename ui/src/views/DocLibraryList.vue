@@ -27,6 +27,8 @@ import { DocLibraryV1alpha1Api } from '@/api/generated'
 import type { DocLibrary } from '@/api/generated'
 import DocLibraryEditingModal from '@/components/DocLibraryEditingModal.vue'
 import GithubWikiImportModal from '@/components/GithubWikiImportModal.vue'
+import PostImportModal from '@/components/PostImportModal.vue'
+import { POST_IMPORT_PERMISSION } from '@/utils/post-import'
 
 const api = new DocLibraryV1alpha1Api(undefined, '', axiosInstance)
 const queryClient = useQueryClient()
@@ -40,6 +42,13 @@ const selectedLibrary = ref<DocLibrary>()
 
 const importModalVisible = ref(false)
 const importTargetLibrary = ref<DocLibrary>()
+const postImportVisible = ref(false)
+const postImportLibrary = ref<DocLibrary>()
+
+function openPostImport(library?: DocLibrary) {
+  postImportLibrary.value = library
+  postImportVisible.value = true
+}
 
 const { data, isLoading } = useQuery({
   queryKey: ['doc-libraries', page, size],
@@ -113,6 +122,9 @@ function handleDelete(library: DocLibrary) {
           <RiDownloadCloud2Line />
         </template>
         导入 Wiki
+      </VButton>
+      <VButton v-permission="[POST_IMPORT_PERMISSION]" type="secondary" @click="openPostImport()">
+        导入本站文章
       </VButton>
       <VButton @click="router.push({ name: 'DocSettings' })">
         <template #icon>
@@ -194,6 +206,9 @@ function handleDelete(library: DocLibrary) {
             <template #dropdownItems>
               <VDropdownItem @click="handleManageDocs(library)">管理文档</VDropdownItem>
               <VDropdownItem @click="handleOpenImport(library)">导入 Wiki</VDropdownItem>
+              <VDropdownItem v-permission="[POST_IMPORT_PERMISSION]" @click="openPostImport(library)">
+                导入本站文章
+              </VDropdownItem>
               <VDropdownItem @click="handleOpenEdit(library)">编辑</VDropdownItem>
               <VDropdownItem type="danger" @click="handleDelete(library)">
                 删除
@@ -225,6 +240,11 @@ function handleDelete(library: DocLibrary) {
     v-if="importModalVisible"
     :library="importTargetLibrary"
     @close="handleCloseImportModal"
+  />
+  <PostImportModal
+    v-if="postImportVisible"
+    :library="postImportLibrary"
+    @close="postImportVisible = false"
   />
 </template>
 

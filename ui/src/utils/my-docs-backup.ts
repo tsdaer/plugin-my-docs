@@ -23,6 +23,7 @@ export interface DocBackupRecord {
     title: string
     slug: string
     libraryName: string
+    sourcePostName?: string
     parent: string
     priority: number
     raw: string
@@ -120,6 +121,7 @@ export function buildMyDocsBackup(
         title: requireString(doc.spec?.title, '文档标题'),
         slug: requireString(doc.spec?.slug, '文档别名'),
         libraryName: requireString(doc.spec?.libraryName, '所属文档库'),
+        sourcePostName: optionalString(doc.spec?.sourcePostName) || undefined,
         parent: optionalString(doc.spec?.parent),
         priority: integer(doc.spec?.priority, 0),
         raw: typeof doc.spec?.raw === 'string' ? doc.spec.raw : '',
@@ -176,6 +178,7 @@ function normalizeDocRecord(value: unknown, index: number): DocBackupRecord {
       title: requireString(spec.title, `第 ${index + 1} 篇文档标题`),
       slug: requireString(spec.slug, `第 ${index + 1} 篇文档别名`),
       libraryName: requireString(spec.libraryName, `第 ${index + 1} 篇文档所属文档库`),
+      sourcePostName: optionalString(spec.sourcePostName) || undefined,
       parent: optionalString(spec.parent),
       priority: integer(spec.priority, 0),
       raw: typeof spec.raw === 'string' ? spec.raw : '',

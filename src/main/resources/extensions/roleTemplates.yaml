@@ -44,6 +44,24 @@ rules:
 apiVersion: v1alpha1
 kind: Role
 metadata:
+  name: my-docs-role-import-posts
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["my-docs-role-manage", "role-template-view-posts"]
+    rbac.authorization.halo.run/module: "文档管理"
+    rbac.authorization.halo.run/display-name: "本站文章导入"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:my-docs:posts:import"]
+rules:
+  - apiGroups: ["console.api.my-docs.tsdaer.run"]
+    resources: ["post-imports"]
+    verbs: ["create"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
   name: my-docs-role-public
   labels:
     halo.run/role-template: "true"

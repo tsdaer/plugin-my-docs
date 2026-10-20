@@ -38,7 +38,19 @@ class PublicEndpointRoleTest {
         Set.of("libraries", "docs", "trees", "media-proxy");
 
     /** console 前缀的端点要求登录，绝不能出现在匿名角色里。 */
-    private static final Set<String> CONSOLE_RESOURCES = Set.of("github-wiki-imports");
+    private static final Set<String> CONSOLE_RESOURCES = Set.of("github-wiki-imports", "post-imports");
+
+    @Test
+    void articleImportRequiresDedicatedRoleAndArticleReadPermission() {
+        String yaml = readRoleTemplates();
+        String importRole = yaml.substring(yaml.indexOf("  name: my-docs-role-import-posts"))
+            .split("---", 2)[0];
+        assertThat(importRole).contains("my-docs-role-manage", "role-template-view-posts",
+            "plugin:my-docs:posts:import", "resources: [\"post-imports\"]", "verbs: [\"create\"]");
+        String manageRole = yaml.substring(yaml.indexOf("  name: my-docs-role-manage"))
+            .split("---", 2)[0];
+        assertThat(manageRole).doesNotContain("post-imports", "role-template-view-posts");
+    }
 
     @Test
     void anonymousRoleGrantsEveryPublicResource() {

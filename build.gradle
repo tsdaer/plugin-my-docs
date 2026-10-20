@@ -22,6 +22,7 @@ dependencies {
     implementation 'org.commonmark:commonmark-ext-autolink:0.24.0'
     implementation 'org.commonmark:commonmark-ext-heading-anchor:0.24.0'
     implementation 'org.commonmark:commonmark-ext-footnotes:0.24.0'
+    implementation 'com.vladsch.flexmark:flexmark-html2md-converter:0.64.8'
 
     // GitHub Wiki 仓库拉取（浅克隆 .wiki.git，打包进插件 jar）。
     // slf4j-api 由 Halo 运行时提供，不打进插件 jar，避免与宿主日志实现冲突。
@@ -42,6 +43,50 @@ tasks.named('jar') {
     // JGit 等依赖为签名 jar，签名文件合并进 fat jar 后摘要必然失配，
     // 导致插件加载时报 Invalid signature file digest，需从产物中剔除。
     exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA', 'META-INF/*.EC'
+}
+
+tasks.register('verifyUiBundle') {
+    group = 'verification'
+    description = 'Verify that every referenced UI chunk is present in the packaged plugin'
+    dependsOn tasks.named('jar')
+    def pluginJar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    inputs.file(pluginJar)
+    doLast {
+        new java.util.zip.ZipFile(pluginJar.get().asFile).withCloseable { archive ->
+            def entry = archive.getEntry('ui/main.js')
+            if (entry == null) {
+                throw new GradleException('Plugin JAR is missing ui/main.js')
+            }
+            def missing = new TreeSet<String>()
+            def references = new TreeSet<String>()
+            archive.entries().each { resource ->
+                if (resource.name.startsWith('ui/') && resource.name.endsWith('.js')) {
+                    def script = archive.getInputStream(resource).withCloseable {
+                        it.getText('UTF-8')
+                    }
+                    def matcher = script =~ /chunks\/[A-Za-z0-9_.-]+\.(?:js|css)/
+                    matcher.each { path ->
+                        references.add(path)
+                        if (archive.getEntry('ui/' + path) == null) {
+                            missing.add(path)
+                        }
+                    }
+                }
+            }
+            if (references.isEmpty()) {
+                throw new GradleException('No UI chunk references found in the plugin JAR')
+            }
+            if (!missing.isEmpty()) {
+                throw new GradleException('Plugin JAR is missing UI chunks: ' + missing.join(', '))
+            }
+            logger.lifecycle('Verified {} UI chunk references in {}', references.size(),
+                pluginJar.get().asFile.name)
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyUiBundle')
 }
 
 java {

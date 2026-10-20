@@ -5,7 +5,6 @@ import static com.github.mydocs.importer.GithubWikiMarkdownConverter.isSpecialFi
 import static com.github.mydocs.importer.GithubWikiMarkdownConverter.normalizePageKey;
 import static com.github.mydocs.importer.GithubWikiMarkdownConverter.slugify;
 import static run.halo.app.extension.index.query.Queries.equal;
-import static run.halo.app.extension.index.query.Queries.startsWith;
 
 import com.github.mydocs.extension.Doc;
 import com.github.mydocs.extension.DocLibrary;
@@ -116,70 +115,8 @@ public class GithubWikiImporter {
     }
 
     private Mono<DocLibrary> resolveTargetLibrary(GithubWikiImportRequest request) {
-        boolean hasExisting = StringUtils.hasText(request.targetLibraryName());
-        boolean hasNewTitle = StringUtils.hasText(request.newLibraryTitle());
-        if (hasExisting == hasNewTitle) {
-            return Mono.error(new ServerWebInputException(
-                "请从「导入到已有文档库」与「新建文档库」中二选一。"));
-        }
-        if (hasExisting) {
-            return client.fetch(DocLibrary.class, request.targetLibraryName())
-                .switchIfEmpty(Mono.error(new ServerWebInputException(
-                    "目标文档库不存在：" + request.targetLibraryName())));
-        }
-        var title = request.newLibraryTitle().trim();
-        if (title.length() > 100) {
-            return Mono.error(new ServerWebInputException("新建文档库标题长度不能超过 100。"));
-        }
-        boolean slugProvided = StringUtils.hasText(request.newLibrarySlug());
-        var desiredSlug = slugProvided
-            ? request.newLibrarySlug().trim() : slugify(title);
-        if (desiredSlug.isEmpty() || desiredSlug.length() > 100) {
-            return Mono.error(new ServerWebInputException(
-                "新建文档库别名需为 1-100 个字符。"));
-        }
-        return reserveLibrarySlug(desiredSlug, slugProvided)
-            .flatMap(slug -> client.create(buildLibrary(title, slug)));
-    }
-
-    /**
-     * 确保新建库的 slug 全局唯一：用户显式提供的别名冲突时报错，自动生成的别名追加序号去重。
-     * 以前缀查询一次取回所有同前缀别名，覆盖 {@code -2}、{@code -3} 等候选。
-     */
-    private Mono<String> reserveLibrarySlug(String desiredSlug, boolean userProvided) {
-        return client.listAll(DocLibrary.class, ListOptions.builder()
-                .fieldQuery(startsWith("spec.slug", desiredSlug))
-                .build(), Sort.unsorted())
-            .map(library -> library.getSpec().getSlug())
-            .collectList()
-            .flatMap(taken -> {
-                if (!taken.contains(desiredSlug)) {
-                    return Mono.just(desiredSlug);
-                }
-                if (userProvided) {
-                    return Mono.error(new ServerWebInputException(
-                        "文档库别名 [" + desiredSlug + "] 已存在，请更换。"));
-                }
-                for (int i = 2; ; i++) {
-                    String candidate = desiredSlug + "-" + i;
-                    if (!taken.contains(candidate)) {
-                        return Mono.just(candidate);
-                    }
-                }
-            });
-    }
-
-    private DocLibrary buildLibrary(String title, String slug) {
-        var library = new DocLibrary();
-        var metadata = new Metadata();
-        metadata.setGenerateName("doc-library-");
-        library.setMetadata(metadata);
-        var spec = new DocLibrary.Spec();
-        spec.setTitle(title);
-        spec.setSlug(slug);
-        spec.setDescription(LIBRARY_DESCRIPTION);
-        library.setSpec(spec);
-        return library;
+        return new ImportLibraryResolver(client).resolve(request.targetLibraryName(),
+            request.newLibraryTitle(), request.newLibrarySlug(), LIBRARY_DESCRIPTION);
     }
 
     private Mono<List<Doc>> listLibraryDocs(String libraryName) {

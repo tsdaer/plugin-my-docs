@@ -19,6 +19,8 @@ import {
 } from '@/utils/doc-tree'
 import DocTreeNodeComp from '@/components/DocTreeNode.vue'
 import GithubWikiImportModal from '@/components/GithubWikiImportModal.vue'
+import PostImportModal from '@/components/PostImportModal.vue'
+import { POST_IMPORT_PERMISSION } from '@/utils/post-import'
 
 const DOC_ENDPOINT = '/apis/console.api.my-docs.tsdaer.run/v1alpha1/docs'
 // 树需要全量节点才能组装，暂不分页；超出上限记录并提示。
@@ -48,6 +50,7 @@ const overName = ref('')
 const overZone = ref<'' | DropZone>('')
 
 const importModalVisible = ref(false)
+const postImportVisible = ref(false)
 
 const { data: library } = useQuery({
   queryKey: ['doc-library', libraryName],
@@ -246,6 +249,10 @@ async function persistPositions() {
         </template>
         导入 Wiki
       </VButton>
+      <VButton v-permission="[POST_IMPORT_PERMISSION]" type="secondary" :disabled="!library"
+        @click="postImportVisible = true">
+        导入本站文章
+      </VButton>
     </template>
   </VPageHeader>
 
@@ -288,5 +295,10 @@ async function persistPositions() {
     v-if="importModalVisible"
     :library="library"
     @close="importModalVisible = false"
+  />
+  <PostImportModal
+    v-if="postImportVisible && library"
+    :library="library"
+    @close="postImportVisible = false"
   />
 </template>

@@ -44,6 +44,8 @@ export interface DocSpec {
      * @memberof DocSpec
      */
     'libraryName': string;
+    /** 来源 Halo 文章的 metadata.name，用于同库重复导入更新 */
+    'sourcePostName'?: string;
     /**
      * 父文档的 metadata.name，为空表示顶层节点
      * @type {string}
